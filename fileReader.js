@@ -85,19 +85,17 @@ function checkValid (songs) {
 
     stats.innerHTML = "Checking file is valid, hold on a second...";
 
-
+    const quarter = Math.floor(songs.length/4);
     for (let i = 0; i < songs.length; i++) {
-        //console.log(`Song ${i}: ${songs[i].master_metadata_track_name}`);
-        //console.log(`${Object.keys(`Keys: ${songs[i]}`)}`);
         if (i == 0) {
             console.log("[>-----------] 0%")
-        } else if (i == songs.length/4) {
+        } else if (i == quarter) {
             console.log("[===>--------] 25%")
-        } else if (i == songs.length/2) {
+        } else if (i == quarter*2) {
             console.log("[======>-----] 50%")
-        } else if (i == songs.length/4*3) {
+        } else if (i == quarter*3) {
             console.log("[=========>--] 75%")
-        } else if (i == songs.length) {
+        } else if (i == songs.length-1) {
             console.log("[===========>] 99%")
         }
         
