@@ -1,26 +1,15 @@
 // Moved all the time still into here because it was a bit messy
 export function timeFormatter(ms) {
-    let s=0, m=0, h=0, d=0, y=0;
-    while (ms > 1000) {
-        s++;
-        ms-=1000;
-    }
-    while (s > 60) {
-        m++;
-        s-=60;
-    }
-    while (m > 60) {
-        h++;
-        m-=60;
-    }
-    while (h > 24) {
-        d++;
-        h-=24;
-    }
-    while (d > 365) {
-        y++;
-        d-=365;
-    }
+    let y = Math.floor(ms / (1000*60*60*24*365));
+    ms -= y * (1000*60*60*24*365);
+    let d = Math.floor(ms / (1000*60*60*24));
+    ms -= d * (1000*60*60*24);
+    let h = Math.floor(ms / (1000*60*60));
+    ms -= h * (1000*60*60);
+    let m = Math.floor(ms / (1000*60));
+    ms -= m * (1000*60);
+    let s = Math.floor(ms / 1000);
+    ms -= s * 1000;
     let output = ""
 
     if (y > 0) {output += `${y} year${sOnEnd(y)}, `}
@@ -36,21 +25,13 @@ export function sOnEnd(num) {
     if (num == 1) {return ""} else {return "s"}
 }
 export function msToHours(ms) {
-    let hours = 0
-    while (ms > (1000*60*60)) {
-        hours++;
-        ms -= (1000*60*60);
-    }
+    let hours = Math.floor(ms / (1000*60*60));
     let hoursStr = `${hours.toLocaleString()} hour${sOnEnd(hours)}`;
 
     return hoursStr;
 }
 export function msToDays(ms) {
-    let days = 0
-    while (ms > (1000*60*60*24)) {
-        days++;
-        ms -= (1000*60*60*24);
-    }
+    let days = Math.floor(ms / (1000*60*60*24));
     let daysStr = `${days.toLocaleString()} day${sOnEnd(days)}`;
 
     return daysStr;
