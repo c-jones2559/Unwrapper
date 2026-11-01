@@ -108,7 +108,7 @@ function generateListHTML(sortedData) {
     
     for (let i = 0; i < 50 && i < sortedData.length; i++) {
         const stats = sortedData[i][1];
-        const name = stats.name;
+        const name = escapeHTML(stats.name);
         const count = stats.count;
         const timeMs = stats.time;
         // This will be undefined for the Artists tab, which is fine
@@ -119,7 +119,7 @@ function generateListHTML(sortedData) {
         // Build the main text: "Song Name" or "Song Name by Artist"
         let headerContent = `<strong>${name}</strong>`;
         if (artist) {
-            headerContent += `<span style="color: #888; font-weight: normal;"> - ${artist}</span>`;
+            headerContent += `<span style="color: #888; font-weight: normal;"> - ${escapeHTML(artist)}</span>`;
         }
 
         html += `<li>
@@ -140,6 +140,16 @@ function formatHoursAndMinutes(ms) {
     const remainingMinutes = minutes % 60;
 
     return `${hours} hour${sOnEnd(hours)}, ${remainingMinutes} minute${sOnEnd(remainingMinutes)}`;
+}
+
+// 9. Stops a song called "<b>hi</b>" turning into actual HTML
+function escapeHTML(text) {
+    return String(text)
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll('"', "&quot;")
+        .replaceAll("'", "&#39;");
 }
 
 // --- DATA PROCESSORS (Updated to capture Artist name) ---
