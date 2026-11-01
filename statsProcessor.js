@@ -10,6 +10,11 @@ let appState = {
 // 2. The Initializer
 export function calculateStats(songs) {
     console.log("Initializing Dashboard...");
+
+    // ts is in UTC, so work out the local year once here rather than on every filter change
+    for (const song of songs) {
+        song.localYear = String(new Date(song.ts).getFullYear());
+    }
     appState.allData = songs;
 
     document.getElementById('bento-grid').classList.remove('hidden');
@@ -51,7 +56,7 @@ function render() {
 // 4. Helper to Filter Data
 function filterDataByTime(data, year) {
     if (year === 'all') return data;
-    return data.filter(item => item.ts && item.ts.startsWith(year));
+    return data.filter(item => item.localYear == year);
 }
 
 // 5. Helper to Update Header
@@ -86,7 +91,7 @@ function setupEventListeners() {
 function setupYearOptions(data) {
     const years = new Set();
     data.forEach(item => {
-        if (item.ts) years.add(item.ts.slice(0, 4));
+        years.add(item.localYear);
     });
     
     const select = document.getElementById('time-range');
