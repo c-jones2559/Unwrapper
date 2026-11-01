@@ -53,32 +53,6 @@ document.getElementById('processBtn').addEventListener('click', async () => {
     }
 });
 
-const validFields = [
-    "ts",
-    "platform",
-    "ms_played",
-    "conn_country",
-    "ip_addr",
-    "master_metadata_track_name",
-    "master_metadata_album_artist_name",
-    "master_metadata_album_album_name",
-    "spotify_track_uri",
-    "episode_name",
-    "episode_show_name",
-    "spotify_episode_uri",
-    "audiobook_title",
-    "audiobook_uri",
-    "audiobook_chapter_uri",
-    "audiobook_chapter_title",
-    "reason_start",
-    "reason_end",
-    "shuffle",
-    "skipped",
-    "offline",
-    "offline_timestamp",
-    "incognito_mode"
-]
-
 function checkValid (songs) {
     console.log("Checking valid...");
     const stats = document.getElementById("content-viewport");
@@ -98,17 +72,14 @@ function checkValid (songs) {
         } else if (i == songs.length-1) {
             console.log("[===========>] 99%")
         }
-        
-        for (const key of Object.keys(songs[i])) {        
-            if (validFields.includes(key)) {
-                continue;
-            } else {
-                console.error(`Files invalid. Found unexpected key: ${key}`);
-                stats.innerHTML = "Invalid, please enter a different file. See help for more details. (help hasn't been implemented yet)";
-                return;
-            }
+
+        // Only need ts and ms_played, anything else Spotify adds later can just be ignored
+        const song = songs[i];
+        if (song == null || typeof song.ts != "string" || isNaN(Date.parse(song.ts)) || typeof song.ms_played != "number") {
+            console.error(`Files invalid. Row ${i} is missing ts or ms_played.`);
+            stats.innerHTML = "Invalid, please enter a different file. See help for more details. (help hasn't been implemented yet)";
+            return;
         }
-        //console.log(`All keys valid for file ${i}.`);
     }
     console.log("[============] 100%");
     console.log("File valid!");
