@@ -62,8 +62,8 @@ function updateBentoStats(data) {
     const songs = topSongs(data);
     const artists = topArtists(data);
 
-    document.getElementById('top-song-display').innerText = songs.length > 0 ? songs[0][0] : "-";
-    document.getElementById('top-artist-display').innerText = artists.length > 0 ? artists[0][0] : "-";
+    document.getElementById('top-song-display').innerText = songs.length > 0 ? songs[0][1].name : "-";
+    document.getElementById('top-artist-display').innerText = artists.length > 0 ? artists[0][1].name : "-";
 }
 
 // 6. Setup Event Listeners
@@ -107,8 +107,8 @@ function generateListHTML(sortedData) {
     let html = `<ol class="stats-list">`;
     
     for (let i = 0; i < 50 && i < sortedData.length; i++) {
-        const name = sortedData[i][0];
         const stats = sortedData[i][1];
+        const name = stats.name;
         const count = stats.count;
         const timeMs = stats.time;
         // This will be undefined for the Artists tab, which is fine
@@ -152,15 +152,18 @@ function topSongs(songs) {
     const stats = {};
     for (const song of songs) {
         const name = song.master_metadata_track_name;
+        const artist = song.master_metadata_album_artist_name;
         if (name) {
-            // Initialize with artist name if it's new
-            if (!stats[name]) stats[name] = { 
-                count: 0, 
-                time: 0, 
-                artist: song.master_metadata_album_artist_name 
+            // Key on artist too, otherwise every song called "Intro" gets lumped together
+            const key = `${artist}\n${name}`;
+            if (!stats[key]) stats[key] = {
+                name: name,
+                count: 0,
+                time: 0,
+                artist: artist
             };
-            stats[name].count++;
-            stats[name].time += song.ms_played || 0;
+            stats[key].count++;
+            stats[key].time += song.ms_played || 0;
         }
     }
     return Object.entries(stats).sort((a, b) => b[1].count - a[1].count);
@@ -171,7 +174,7 @@ function topArtists(songs) {
     for (const song of songs) {
         const name = song.master_metadata_album_artist_name;
         if (name) {
-            if (!stats[name]) stats[name] = { count: 0, time: 0 }; // Artist name is already the key
+            if (!stats[name]) stats[name] = { name: name, count: 0, time: 0 }; // No artist line needed, it's the name
             stats[name].count++;
             stats[name].time += song.ms_played || 0;
         }
@@ -183,15 +186,18 @@ function topAlbums(songs) {
     const stats = {};
     for (const song of songs) {
         const name = song.master_metadata_album_album_name;
+        const artist = song.master_metadata_album_artist_name;
         if (name) {
-            // Initialize with artist name if it's new
-            if (!stats[name]) stats[name] = { 
-                count: 0, 
-                time: 0, 
-                artist: song.master_metadata_album_artist_name 
+            // Same as songs, loads of artists have an album called "Greatest Hits"
+            const key = `${artist}\n${name}`;
+            if (!stats[key]) stats[key] = {
+                name: name,
+                count: 0,
+                time: 0,
+                artist: artist
             };
-            stats[name].count++;
-            stats[name].time += song.ms_played || 0;
+            stats[key].count++;
+            stats[key].time += song.ms_played || 0;
         }
     }
     return Object.entries(stats).sort((a, b) => b[1].count - a[1].count);
