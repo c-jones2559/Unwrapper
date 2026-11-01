@@ -84,7 +84,24 @@ function checkValid (songs) {
     console.log("[============] 100%");
     console.log("File valid!");
     stats.innerHTML = "(Valid file, processing...)";
-    calculateStats(songs);
+    calculateStats(removeDuplicates(songs));
     return;
+}
+
+// Spotify's files overlap a bit, so the same play can turn up in two of them
+function removeDuplicates (songs) {
+    const seen = {};
+    let unique = [];
+    for (const song of songs) {
+        const uri = song.spotify_track_uri || song.spotify_episode_uri || song.audiobook_chapter_uri;
+        const key = `${song.ts}|${uri}|${song.ms_played}`;
+        if (seen[key]) {
+            continue;
+        }
+        seen[key] = true;
+        unique.push(song);
+    }
+    console.log(`Removed ${songs.length - unique.length} duplicates.`);
+    return unique;
 }
 
