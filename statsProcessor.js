@@ -148,7 +148,11 @@ function formatHoursAndMinutes(ms) {
 const minPlayMs = 30000;
 
 function totalTime(songs) {
-    return songs.reduce((acc, song) => acc + (song.ms_played || 0), 0);
+    // Podcasts and audiobooks don't have a track name, so they don't count
+    return songs.reduce((acc, song) => {
+        if (!song.master_metadata_track_name) return acc;
+        return acc + (song.ms_played || 0);
+    }, 0);
 }
 
 function topSongs(songs) {
