@@ -144,6 +144,9 @@ function formatHoursAndMinutes(ms) {
 
 // --- DATA PROCESSORS (Updated to capture Artist name) ---
 
+// Spotify only counts it as a play after 30 seconds, anything less is a skip
+const minPlayMs = 30000;
+
 function totalTime(songs) {
     return songs.reduce((acc, song) => acc + (song.ms_played || 0), 0);
 }
@@ -162,7 +165,7 @@ function topSongs(songs) {
                 time: 0,
                 artist: artist
             };
-            stats[key].count++;
+            if (song.ms_played >= minPlayMs) stats[key].count++;
             stats[key].time += song.ms_played || 0;
         }
     }
@@ -175,7 +178,7 @@ function topArtists(songs) {
         const name = song.master_metadata_album_artist_name;
         if (name) {
             if (!stats[name]) stats[name] = { name: name, count: 0, time: 0 }; // No artist line needed, it's the name
-            stats[name].count++;
+            if (song.ms_played >= minPlayMs) stats[name].count++;
             stats[name].time += song.ms_played || 0;
         }
     }
@@ -196,7 +199,7 @@ function topAlbums(songs) {
                 time: 0,
                 artist: artist
             };
-            stats[key].count++;
+            if (song.ms_played >= minPlayMs) stats[key].count++;
             stats[key].time += song.ms_played || 0;
         }
     }
