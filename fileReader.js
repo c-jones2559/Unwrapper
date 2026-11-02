@@ -1,4 +1,5 @@
-import { calculateStats, clearStats, announce, autoStartGenres } from './statsProcessor.js?v=b19063d6';
+import { calculateStats, clearStats, announce, autoStartGenres } from './statsProcessor.js?v=8129e47c';
+import { fromAccountData, removeDuplicates } from './plays.js?v=8129e47c';
 
 // 1. Helper function to promise-ify the FileReader (makes life way easier)
 const readJsonFile = (file) => {
@@ -106,48 +107,3 @@ function checkValid (songs) {
     autoStartGenres();
     return;
 }
-
-// The "Account data" download (the one that only goes back a year) has its own names for things:
-// endTime, artistName, trackName and msPlayed, and no album. endTime is UTC like ts, but written
-// "2023-01-01 12:34", which some browsers won't read, so it's turned into a proper one here
-function fromAccountData(songs) {
-    const isOld = song => song != null && song.ts == null && typeof song.endTime == "string" && typeof song.msPlayed == "number";
-    if (!songs.some(isOld)) return songs;
-
-    // The same plays would be in an extended file too, but without a track URI or seconds
-    // to match on they can't be spotted as duplicates, so if there's an extended file just use that
-    if (songs.some(song => song != null && song.ts != null)) {
-        console.log("Got Account data and Extended streaming history together, using the extended one");
-        return songs.filter(song => !isOld(song));
-    }
-
-    return songs.map(song => {
-        if (!isOld(song)) return song;
-        return {
-            ts: `${song.endTime.replace(' ', 'T')}:00Z`,
-            ms_played: song.msPlayed,
-            // Podcasts in this download have episodeName instead of trackName, so they stay out of the music stats
-            master_metadata_track_name: song.trackName || null,
-            master_metadata_album_artist_name: song.artistName || null,
-            master_metadata_album_album_name: null
-        };
-    });
-}
-
-// Spotify's files overlap a bit, so the same play can turn up in two of them
-function removeDuplicates (songs) {
-    const seen = {};
-    let unique = [];
-    for (const song of songs) {
-        const uri = song.spotify_track_uri || song.spotify_episode_uri || song.audiobook_chapter_uri;
-        const key = `${song.ts}|${uri}|${song.ms_played}`;
-        if (seen[key]) {
-            continue;
-        }
-        seen[key] = true;
-        unique.push(song);
-    }
-    console.log(`Removed ${songs.length - unique.length} duplicates.`);
-    return unique;
-}
-

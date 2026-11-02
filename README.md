@@ -48,12 +48,14 @@ SELECT json_group_array(json_object(
   'platform', 'navidrome',
   'master_metadata_track_name', m.title,
   'master_metadata_album_artist_name', m.artist,
-  'master_metadata_album_album_name', m.album))
+  'master_metadata_album_album_name', m.album,
+  'artist_mbid', NULLIF(m.mbz_artist_id, ''),
+  'genre', json_extract(m.tags, '$.genre[0].value')))
 FROM scrobbles s JOIN media_file m ON m.id = s.media_file_id
 WHERE s.user_id = (SELECT id FROM user WHERE user_name = 'YOUR_USERNAME');" > navidrome_history.json
 ```
 
-Then upload `navidrome_history.json`, on its own or along with your Spotify files. Change `YOUR_USERNAME` to the name you log in to Navidrome with, so you only get your own plays. You'll need `sqlite3` installed on the server. Navidrome doesn't record how long you actually listened for, only that you got at least halfway, so each play counts as the whole song or the time until the next play, whichever's shorter.
+Then upload `navidrome_history.json`, on its own or along with your Spotify files. Change `YOUR_USERNAME` to the name you log in to Navidrome with, so you only get your own plays. It also takes each artist's MusicBrainz ID and the genre from your tags, which keep artists together if they've been renamed and give the Fun tab genres without looking them up. You'll need `sqlite3` installed on the server. Navidrome doesn't record how long you actually listened for, only that you got at least halfway, so each play counts as the whole song or the time until the next play, whichever's shorter.
 
 ## Running it yourself
 
@@ -65,4 +67,16 @@ python3 -m http.server 8000
 
 and open `http://localhost:8000`.
 
-If you change any CSS or JS, bump the `?v=` number everywhere it appears (`grep -rn "?v=" --include='*.html' --include='*.js' .`). Otherwise browsers that already have the old files cached can end up mixing old and new ones.
+The `?v=` on every CSS and JS link stops browsers that have old files cached mixing them with new ones. It's a hash of the CSS and JS, stamped automatically when you commit, once you've turned the repo's git hook on:
+
+```bash
+git config core.hooksPath .githooks
+```
+
+(or run `scripts/stamp-version.sh` by hand).
+
+The counting (reading the files, the Navidrome time, grouping names) is in `plays.js`, which has tests:
+
+```bash
+node --test
+```

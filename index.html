@@ -3,9 +3,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <!-- The ?v= stops browsers mixing old and new files after an update. When changing any
-         CSS or JS, bump it everywhere (grep for "?v=": both html files and the imports in the js) -->
-    <link rel="stylesheet" href="style.css?v=b19063d6">
+    <!-- The ?v= stops browsers mixing old and new files after an update. It's stamped with a hash of the
+         CSS and JS on every commit by .githooks/pre-commit (see scripts/stamp-version.sh) -->
+    <link rel="stylesheet" href="style.css?v=8129e47c">
     <title>Unwrapper</title>
     <link rel="manifest" href="manifest.json">
     <link rel="icon" href="icons/icon-192.png" type="image/png">
@@ -22,7 +22,7 @@
         <button id="processBtn">Process</button>
     </div>
     <button id="change-files" type="button" class="secondary-btn change-files hidden">Change files</button>
-    <script type="module" src="fileReader.js?v=b19063d6"></script>
+    <script type="module" src="fileReader.js?v=8129e47c"></script>
     
     <!-- <p id="valid"></p> -->
 
@@ -165,7 +165,7 @@
         </div>
     </dialog>
 
-    <!-- <script src="fileReader.js?v=b19063d6"></script> -->
+    <!-- <script src="fileReader.js?v=8129e47c"></script> -->
     <!-- <script src="statsProcessor.js"></script> -->
 </body>
 </html>

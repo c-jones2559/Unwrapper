@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <link rel="stylesheet" href="../style.css?v=b19063d6">
+    <link rel="stylesheet" href="../style.css?v=8129e47c">
     <title>Unwrapper - Info</title>
     <link rel="manifest" href="../manifest.json">
     <link rel="icon" href="../icons/icon-192.png" type="image/png">
@@ -57,7 +57,9 @@ SELECT json_group_array(json_object(
   'platform', 'navidrome',
   'master_metadata_track_name', m.title,
   'master_metadata_album_artist_name', m.artist,
-  'master_metadata_album_album_name', m.album))
+  'master_metadata_album_album_name', m.album,
+  'artist_mbid', NULLIF(m.mbz_artist_id, ''),
+  'genre', json_extract(m.tags, '$.genre[0].value')))
 FROM scrobbles s JOIN media_file m ON m.id = s.media_file_id
 WHERE s.user_id = (SELECT id FROM user WHERE user_name = 'YOUR_USERNAME');" &gt; navidrome_history.json</pre>
         </div>
@@ -65,6 +67,7 @@ WHERE s.user_id = (SELECT id FROM user WHERE user_name = 'YOUR_USERNAME');" &gt;
         <ul>
             <li>You'll need <code>sqlite3</code> installed on the server (<code>sudo apt install sqlite3</code> on Debian or Ubuntu).</li>
             <li>Change <code>YOUR_USERNAME</code> to the name you log in to Navidrome with, so you only get your own plays.</li>
+            <li>It also takes each artist's MusicBrainz ID and the genre from your tags, which keep artists together if they've been renamed and give the Fun tab genres without looking them up. An export from before these were added still works.</li>
             <li>Navidrome doesn't record how long you actually listened for, only that you got at least halfway, so each play counts as the whole song or the time until the next play, whichever's shorter.</li>
         </ul>
 

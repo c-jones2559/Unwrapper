@@ -1,6 +1,7 @@
-import { sOnEnd } from './timeBits.js?v=b19063d6';
-import { buildGraphData, drawGraph } from './graph.js?v=b19063d6';
-import { drawCard, themes, findAlbumCover } from './share.js?v=b19063d6';
+import { sOnEnd } from './timeBits.js?v=8129e47c';
+import { buildGraphData, drawGraph } from './graph.js?v=8129e47c';
+import { drawCard, themes, findAlbumCover } from './share.js?v=8129e47c';
+import { minPlayMs, capNavidromePlays, nameKey, buildNameKeys } from './plays.js?v=8129e47c';
 
 // 1. The Global State
 let appState = {
@@ -36,7 +37,9 @@ let appState = {
     listType: 'song', // What's in the list on screen, and the keys in order, for clicking a row
     listKeys: [],
     searchIndex: {}, // Everything you can search for, built once on load
-    names: {} // How to spell each artist/song/album key, also built once on load
+    names: {}, // How to spell each artist/song/album key, also built once on load
+    artistIds: {}, // Artist key to MusicBrainz ID, where the files say
+    libraryGenres: {} // Artist key to genre, from the files' own tags
 };
 
 // 2. The Initializer
@@ -65,7 +68,10 @@ export function calculateStats(songs) {
     }
     capNavidromePlays(songs);
     appState.allData = songs;
-    buildNameKeys(songs);
+    const grouped = buildNameKeys(songs);
+    appState.names = grouped.names;
+    appState.artistIds = grouped.ids; // MusicBrainz IDs, from newer Navidrome exports
+    appState.libraryGenres = grouped.genres; // Genre tags from a Navidrome library
     buildSearchIndex(songs);
     loadExclusions();
     applyExclusions();
@@ -82,18 +88,6 @@ export function calculateStats(songs) {
     setupEventListeners();
     render();
     announce('Done, your stats are below.');
-}
-
-// Navidrome doesn't say how long you listened, so the export counts every play as the whole song.
-// It counts a play about halfway through though, so skipping later still gets the full length.
-// A play can't have lasted longer than it was until the next one, so cut it off there. Never below
-// 30 seconds, since Navidrome had already decided it was a play, and the last one's left as it is
-function capNavidromePlays(songs) {
-    const plays = songs.filter(song => song.platform == 'navidrome').sort((a, b) => a.playedAt - b.playedAt);
-    for (let i = 0; i < plays.length - 1; i++) {
-        const gap = plays[i + 1].playedAt - plays[i].playedAt;
-        plays[i].ms_played = Math.min(plays[i].ms_played, Math.max(gap, minPlayMs));
-    }
 }
 
 // After an upload that didn't work. Without this the stats from the last upload stay on screen,
@@ -2013,17 +2007,18 @@ function saveGenreCache(cache) {
     }
 }
 
-// The artists worth looking up: most played across everything, so changing the date filter doesn't need more
+// The artists worth looking up: most played across everything, so changing the date filter doesn't need more.
+// Not ones whose genre's in the files already
 function genreArtistKeys() {
-    return topArtists(appState.data).slice(0, genreArtists).map(entry => entry[0]);
+    return topArtists(appState.data).slice(0, genreArtists).map(entry => entry[0]).filter(key => !appState.libraryGenres[key]);
 }
 
-// Genre for each artist key that's been looked up and has one
+// Genre for each artist key that has one: from the files' own tags first, then whatever's been looked up
 function artistGenres() {
     const cache = genreCache();
     const genres = {};
     for (const key in appState.names.artist) {
-        const found = cache[key];
+        const found = appState.libraryGenres[key] || cache[key];
         if (found) genres[key] = found;
     }
     return genres;
@@ -2058,9 +2053,17 @@ async function genreList() {
     return new Set(list);
 }
 
-// One artist: only a confident match (score 100) with the same name counts, then their most tagged genre.
+// One artist: by their MusicBrainz ID if the files have it, which is certain and quicker (it's not their busy search).
+// Otherwise by name, where only a confident match (score 100) with the same name counts. Then their most tagged genre.
 // Gives back the genre, or '' if there isn't one (remembered, so it's not looked up again)
-async function lookUpGenre(artist, genres) {
+async function lookUpGenre(key, genres) {
+    const id = appState.artistIds[key];
+    if (id) {
+        const found = await (await getMusicBrainz(`https://musicbrainz.org/ws/2/artist/${id}?inc=genres&fmt=json`)).json();
+        const ranked = (found.genres || []).sort((a, b) => b.count - a.count);
+        return ranked.length > 0 ? ranked[0].name : '';
+    }
+    const artist = appState.names.artist[key].name;
     const query = encodeURIComponent(`artist:"${artist.replace(/"/g, '')}"`);
     const result = await (await getMusicBrainz(`https://musicbrainz.org/ws/2/artist/?query=${query}&fmt=json&limit=5`)).json();
     const match = (result.artists || []).find(a => a.score == 100 && nameKey(a.name) == nameKey(artist));
@@ -2089,7 +2092,7 @@ async function startGenreLookup() {
             // Counted from the start of each, so a slow answer doesn't make it slower still
             const started = Date.now();
             // If MusicBrainz is too busy, this throws and the rest wait for Try again (or the next visit)
-            cache[key] = await lookUpGenre(appState.names.artist[key].name, genres);
+            cache[key] = await lookUpGenre(key, genres);
             saveGenreCache(cache);
             genreLookup.done++;
             // The count goes up every time, but the cards only get redrawn every 20, since that's slow with years of data
@@ -2317,225 +2320,12 @@ function openExcludeWindow() {
 
 // --- DATA PROCESSORS (Updated to capture Artist name) ---
 
-// Spotify only counts it as a play after 30 seconds, anything less is a skip
-const minPlayMs = 30000;
-
 function totalTime(songs) {
     // Podcasts and audiobooks don't have a track name, so they don't count
     return songs.reduce((acc, song) => {
         if (!song.master_metadata_track_name) return acc;
         return acc + (song.ms_played || 0);
     }, 0);
-}
-
-// The key a name gets grouped (and searched) by. Lowercase, and curly apostrophes and the various
-// dashes all made plain, since Spotify and Navidrome write "I Don’t Need Anyone" and "I Don't Need Anyone"
-function nameKey(text) {
-    return text.toLowerCase()
-        .replace(/[‘’‛ʼ`´]/g, "'")
-        .replace(/[“”‟]/g, '"')
-        .replace(/[‐‑‒–—―−]/g, '-');
-}
-
-// Spotify and Navidrome don't always agree on capitals ("Bring Me The Horizon" vs "Bring Me the Horizon")
-// or punctuation, so everything's grouped by nameKey. They're worked out once on load rather than every render,
-// and each key shows whichever spelling turns up most across all the data, so names don't change with the filter
-//
-// Names also get tidied so the same thing isn't split in two:
-//  - Guests come off: "Machine Gun Kelly feat. Halsey" is Machine Gun Kelly, "forget me too (feat. Halsey)" is forget me too
-//  - Editions come off albums: "Tickets to My Downfall (SOLD OUT Deluxe)" is Tickets to My Downfall
-//  - "Machine Gun Kelly & Travis Barker" on a Machine Gun Kelly album counts as Machine Gun Kelly. Only on
-//    one of their albums though, so a band like "Prince Daddy & the Hyena" stays as it is
-//  - Two names with the same album and the same songs on it are one artist who's been renamed ("mgk")
-function buildNameKeys(songs) {
-    // 1. Each play on its own: guests off the artist and title, edition names off the album
-    const parts = songs.map(song => {
-        const artist = song.master_metadata_album_artist_name;
-        const track = song.master_metadata_track_name;
-        const album = song.master_metadata_album_album_name;
-        return {
-            artist: artist ? tidied('artist', artist, () => nameKey(withoutFeatures(artist))) : null,
-            track: track ? tidied('track', track, () => nameKey(withoutFeatures(track))) : null,
-            album: album ? tidied('album', album, () => nameKey(albumBase(album, false))) : null,
-            exactAlbum: album ? tidied('exactAlbum', album, () => nameKey(album)) : null, // As it was, for spotting renames
-            plainAlbum: false // Set if step 4 takes the rest of the brackets off too
-        };
-    });
-
-    // 2. Collaborations on someone's album count as theirs. Worked out once per artist on each album, not every play
-    const onAlbum = artistsOnAlbums(parts, 'album');
-    const collabs = {};
-    for (const album in onAlbum) {
-        for (const artist in onAlbum[album]) {
-            for (const other in onAlbum[album]) {
-                if (other != artist && collabJoins.some(join => artist.startsWith(other + join))) {
-                    collabs[`${album}\n${artist}`] = other;
-                    break;
-                }
-            }
-        }
-    }
-    for (const p of parts) {
-        if (!p.artist || !p.album) continue;
-        const main = collabs[`${p.album}\n${p.artist}`];
-        if (main) p.artist = main;
-    }
-
-    // 3. Renamed artists. If two names have the same album with at least 3 of the same songs on it,
-    // they're the same artist, and they get grouped under whichever's played most. The album has to be
-    // spelled exactly the same, edition and all, so a covers album ("Dude Ranch (Completely Covered)") doesn't count
-    const plays = {};
-    for (const p of parts) {
-        if (p.artist) plays[p.artist] = (plays[p.artist] || 0) + 1;
-    }
-    const sameAs = {};
-    const find = artist => {
-        while (sameAs[artist]) artist = sameAs[artist];
-        return artist;
-    };
-    const albums = artistsOnAlbums(parts, 'exactAlbum');
-    for (const album in albums) {
-        const artists = Object.keys(albums[album]);
-        if (artists.length > 20) continue; // A compilation, nobody's been renamed in there
-        for (let i = 0; i < artists.length; i++) {
-            for (let j = i + 1; j < artists.length; j++) {
-                let shared = 0;
-                for (const track of albums[album][artists[i]]) {
-                    if (albums[album][artists[j]].has(track)) shared++;
-                }
-                if (shared < 3) continue;
-                const a = find(artists[i]), b = find(artists[j]);
-                if (a == b) continue;
-                if (plays[a] >= plays[b]) sameAs[b] = a;
-                else sameAs[a] = b;
-            }
-        }
-    }
-    for (const p of parts) {
-        if (p.artist) p.artist = find(p.artist);
-    }
-
-    // 4. Anything else in brackets ("(All Access)") comes off if the artist's got the album without it too.
-    // Not before then, since it could be a different album
-    const theirAlbums = {};
-    for (const p of parts) {
-        if (p.album) theirAlbums[`${p.artist}\n${p.album}`] = true;
-    }
-    for (const p of parts) {
-        if (!p.album) continue;
-        const plain = albumBase(p.album, true);
-        if (plain != p.album && theirAlbums[`${p.artist}\n${plain}`]) {
-            p.album = plain;
-            p.plainAlbum = true;
-        }
-    }
-
-    // 5. The keys, and how to spell each one
-    const spellings = { artist: {}, song: {}, album: {} };
-    for (let i = 0; i < songs.length; i++) {
-        const song = songs[i];
-        const p = parts[i];
-        const artist = song.master_metadata_album_artist_name;
-        const track = song.master_metadata_track_name;
-        const album = song.master_metadata_album_album_name;
-        if (artist) {
-            song.artistKey = p.artist;
-            const name = tidied('artistName', artist, () => withoutFeatures(artist));
-            countSpelling(spellings.artist, song.artistKey, name, { name: name });
-        }
-        if (track) {
-            // Key on artist too, otherwise every song called "Intro" gets lumped together
-            song.songKey = `${p.artist}\n${p.track}`;
-            countSpelling(spellings.song, song.songKey, track, { name: track });
-        }
-        if (album) {
-            // Same as songs, loads of artists have an album called "Greatest Hits"
-            song.albumKey = `${p.artist}\n${p.album}`;
-            const name = p.plainAlbum ? tidied('plainAlbumName', album, () => albumBase(album, true))
-                                      : tidied('albumName', album, () => albumBase(album, false));
-            countSpelling(spellings.album, song.albumKey, name, { name: name });
-        }
-    }
-
-    appState.names = { artist: {}, song: {}, album: {} };
-    for (const type in spellings) {
-        for (const key in spellings[type]) {
-            appState.names[type][key] = commonest(spellings[type][key]);
-        }
-    }
-    // Songs and albums say whose they are with the artist's own name, not whichever spelling that play had
-    for (const type of ['song', 'album']) {
-        for (const key in appState.names[type]) {
-            const artistKey = key.slice(0, key.indexOf('\n'));
-            const artist = appState.names.artist[artistKey];
-            appState.names[type][key] = { ...appState.names[type][key], artist: artist ? artist.name : '' };
-        }
-    }
-}
-
-// What joins two artists in a collaboration, after the main one (keys are lowercase)
-const collabJoins = [' & ', ', ', ' x ', ' and ', ' with ', ' + ', ' / '];
-
-// Everyone on each album, and which of its songs they've got: { album: { artist: Set of tracks } }.
-// field says which album name to go by, the tidied one or exactly as it was
-function artistsOnAlbums(parts, field) {
-    const albums = {};
-    for (const p of parts) {
-        const album = p[field];
-        if (!p.artist || !album) continue;
-        if (!albums[album]) albums[album] = {};
-        if (!albums[album][p.artist]) albums[album][p.artist] = new Set();
-        if (p.track) albums[album][p.artist].add(p.track);
-    }
-    return albums;
-}
-
-// The same names turn up thousands of times, so each one's only tidied once
-const tidyCache = {};
-function tidied(type, text, tidy) {
-    if (!tidyCache[type]) tidyCache[type] = new Map();
-    let result = tidyCache[type].get(text);
-    if (result === undefined) {
-        result = tidy();
-        tidyCache[type].set(text, result);
-    }
-    return result;
-}
-
-// "Machine Gun Kelly feat. Halsey" to "Machine Gun Kelly", "forget me too (feat. Halsey)" to "forget me too"
-function withoutFeatures(text) {
-    return text.replace(/\s*[(\[](?:feat|ft|featuring|with)\.?\s[^)\]]*[)\]]/gi, '')
-               .replace(/\s+(?:feat|ft|featuring)\.?\s.*$/i, '')
-               .trim() || text;
-}
-
-// Takes edition names off the end of an album: "(Deluxe)", "[Remastered 2011]", " - EP".
-// Anything that makes it a different record ("(Live)", "(Vol. 2)", "(Taylor's Version)") stays on.
-// With anyBrackets, whatever else is in brackets comes off too ("(All Access)")
-const differentRecord = /\blive\b|acoustic|remix|instrumental|karaoke|unplugged|\bdemos?\b|taylor'?s version|reimagined|commentary|cover|tribute|\bvol\b|volume|\bpart\b|\bpt\b|chapter|\bact\b|\bdisc\b|\bside\b/i;
-const editionName = /deluxe|edition|expanded|remaster|anniversary|bonus|special|\bcomplete\b|version|\bep\b|single|explicit|clean|extended/i;
-function albumBase(title, anyBrackets) {
-    let base = title;
-    for (;;) {
-        const match = base.match(/^(.+?)\s*(\([^()]*\)|\[[^\[\]]*\]|\s-\s[^-]+)$/);
-        if (!match || differentRecord.test(match[2])) return base;
-        if (!anyBrackets && !editionName.test(match[2])) return base;
-        base = match[1];
-    }
-}
-
-function countSpelling(counts, key, spelling, parts) {
-    if (!counts[key]) counts[key] = {};
-    if (!counts[key][spelling]) counts[key][spelling] = { n: 0, parts: parts };
-    counts[key][spelling].n++;
-}
-
-function commonest(spellings) {
-    let best = null;
-    for (const spelling in spellings) {
-        if (best == null || spellings[spelling].n > best.n) best = spellings[spelling];
-    }
-    return best.parts;
 }
 
 function topSongs(songs) {
