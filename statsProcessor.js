@@ -1,6 +1,6 @@
-import { sOnEnd } from './timeBits.js?v=12';
-import { buildGraphData, drawGraph } from './graph.js?v=12';
-import { drawCard, themes, findAlbumCover } from './share.js?v=12';
+import { sOnEnd } from './timeBits.js?v=13';
+import { buildGraphData, drawGraph } from './graph.js?v=13';
+import { drawCard, themes, findAlbumCover } from './share.js?v=13';
 
 // 1. The Global State
 let appState = {
@@ -665,7 +665,7 @@ function setupYearOptions(data) {
 
     const custom = document.createElement('option');
     custom.value = 'custom';
-    custom.innerText = 'Custom range';
+    custom.innerText = 'Custom';
     select.appendChild(custom);
 
     // Start the custom range off as first play to last play
@@ -1262,7 +1262,7 @@ function wrappedHTML() {
         const text = { all: 'All time', custom: 'Custom' }[year] || year;
         chips += `<button type="button" class="year-chip" data-year="${year}" aria-pressed="${appState.wrappedPeriod == year}">${text}</button>`;
     }
-    // From and to years, only once Custom range is picked
+    // From and to years, only once Custom is picked
     let range = '';
     if (appState.wrappedPeriod == 'custom') {
         const options = picked => years.slice().reverse().map(year =>

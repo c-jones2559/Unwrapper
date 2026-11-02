@@ -269,6 +269,11 @@ a:hover {
     border-radius: 4px;
 }
 
+/* A bit tighter, so a custom range still fits on one line with the tabs */
+#custom-range input {
+    padding: 0.5rem 0.35rem;
+}
+
 .stats-list {
     width: 100%; /* Fill the viewport we just defined */
     box-sizing: border-box;
