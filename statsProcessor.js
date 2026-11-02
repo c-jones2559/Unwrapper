@@ -1,6 +1,6 @@
-import { sOnEnd } from './timeBits.js?v=14';
-import { buildGraphData, drawGraph } from './graph.js?v=14';
-import { drawCard, themes, findAlbumCover } from './share.js?v=14';
+import { sOnEnd } from './timeBits.js?v=15';
+import { buildGraphData, drawGraph } from './graph.js?v=15';
+import { drawCard, themes, findAlbumCover } from './share.js?v=15';
 
 // 1. The Global State
 let appState = {
@@ -1542,7 +1542,8 @@ function funHTML(periodRows) {
 
 // One card: a title, a big headline, a line under it, and optionally a short list.
 // Each list item is { type, key, value } for an artist or song (clickable, onto the graph) or { text, value }
-function funCard(title, big, detail, items = []) {
+// chart is extra HTML underneath (funBars), and makes the card the full width of the grid
+function funCard(title, big, detail, items = [], chart = '') {
     let list = '';
     for (const item of items) {
         let name;
@@ -1556,12 +1557,36 @@ function funCard(title, big, detail, items = []) {
         }
         list += `<li><span class="fun-name">${name}</span><span class="fun-value">${escapeHTML(item.value)}</span></li>`;
     }
-    return `<section class="fun-card">
+    return `<section class="fun-card${chart ? ' fun-wide' : ''}">
                 <h3>${title}</h3>
                 <p class="fun-big">${escapeHTML(big)}</p>
                 <p class="fun-detail">${detail}</p>
                 ${list ? `<ol class="fun-list">${list}</ol>` : ''}
+                ${chart}
             </section>`;
+}
+
+// A small bar chart: share of listening time for each hour, day, etc. Hovering a bar says its numbers,
+// and the same numbers are in a table for screen readers. axisLabels has one per bar, '' for no label
+function funBars(title, values, axisLabels, names) {
+    const total = values.reduce((a, b) => a + b, 0) || 1;
+    const max = Math.max(...values) || 1;
+    let bars = '', axis = '', rows = '';
+    for (let i = 0; i < values.length; i++) {
+        const share = `${Math.round(values[i] / total * 100)}%`;
+        const tip = `${names[i]}: ${share}, ${formatHoursAndMinutes(values[i])}`;
+        // Tooltips near the ends line up with that end, so they don't hang off the card
+        const edge = i < values.length / 4 ? ' start' : i >= values.length * 3 / 4 ? ' end' : '';
+        bars += `<div class="fun-bar${edge}" data-tip="${escapeHTML(tip)}"><span style="height: ${values[i] / max * 100}%"></span></div>`;
+        axis += `<span>${escapeHTML(axisLabels[i])}</span>`;
+        rows += `<tr><th scope="row">${escapeHTML(names[i])}</th><td>${share}</td><td>${formatHoursAndMinutes(values[i])}</td></tr>`;
+    }
+    return `<figure class="fun-chart">
+                <figcaption>${title}</figcaption>
+                <div class="fun-bars" style="--bars: ${values.length}" aria-hidden="true">${bars}</div>
+                <div class="fun-axis" style="--bars: ${values.length}" aria-hidden="true">${axis}</div>
+                <div class="visually-hidden"><table><caption>${title}</caption>${rows}</table></div>
+            </figure>`;
 }
 
 function funDate(ms) {
@@ -1778,13 +1803,19 @@ function clockCard(rows) {
     const day = weekdays.indexOf(Math.max(...weekdays));
     const hour = h => new Date(2000, 0, 1, h).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
     const share = (from, to) => `${Math.round(hours.slice(from, to).reduce((a, b) => a + b, 0) / total * 100)}%`;
-    const dayName = new Date(2000, 0, 2 + day).toLocaleDateString(undefined, { weekday: 'long' }); // 2 Jan 2000 was a Sunday
-    return funCard('When you listen', `${hour(peak)}–${hour((peak + 1) % 24)}`, `is your busiest hour, and ${dayName} your busiest day`, [
-        { text: `After midnight (${hour(0)}–${hour(5)})`, value: share(0, 5) },
-        { text: `Mornings (${hour(5)}–${hour(12)})`, value: share(5, 12) },
-        { text: `Afternoons (${hour(12)}–${hour(18)})`, value: share(12, 18) },
-        { text: `Evenings (${hour(18)}–${hour(0)})`, value: share(18, 24) }
-    ]);
+    const dayName = (d, style) => new Date(2000, 0, 2 + d).toLocaleDateString(undefined, { weekday: style }); // 2 Jan 2000 was a Sunday
+
+    // Hours, labelled every 6. Days start on Monday
+    const hourNames = hours.map((_, h) => `${hour(h)}–${hour((h + 1) % 24)}`);
+    const hourLabels = hours.map((_, h) => h % 6 == 0 ? hour(h) : '');
+    const order = [1, 2, 3, 4, 5, 6, 0];
+    const charts = `<div class="fun-charts">
+                        ${funBars('Time of day', hours, hourLabels, hourNames)}
+                        ${funBars('Day of the week', order.map(d => weekdays[d]), order.map(d => dayName(d, 'short')), order.map(d => dayName(d, 'long')))}
+                    </div>`;
+    return funCard('When you listen', `${hour(peak)}–${hour((peak + 1) % 24)}`,
+        `is your busiest hour, and ${dayName(day, 'long')} your busiest day. ${share(0, 5)} of your listening is after midnight and before 5am`,
+        [], charts);
 }
 
 // How much is on shuffle, and how often you let a song finish. Spotify only, Navidrome doesn't say

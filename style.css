@@ -1038,6 +1038,105 @@ dialog h3 {
     outline-offset: 2px;
 }
 
+/* A card with charts in, across the whole grid */
+.fun-wide {
+    grid-column: 1 / -1;
+}
+
+.fun-charts {
+    display: grid;
+    grid-template-columns: 2fr 1fr;
+    gap: 1.5rem;
+    margin-top: 0.75rem;
+}
+
+.fun-chart {
+    margin: 0;
+}
+
+.fun-chart figcaption {
+    margin-bottom: 0.5rem;
+    color: #b3b3b3;
+    font-size: 0.85rem;
+}
+
+/* One column per bar, 2px apart, sat on a baseline */
+.fun-bars, .fun-axis {
+    display: grid;
+    grid-template-columns: repeat(var(--bars), 1fr);
+    gap: 2px;
+}
+
+.fun-bars {
+    height: 120px;
+    border-bottom: 1px solid #444;
+}
+
+/* The whole column's the hover target, not just the bar, so short bars are easy to hit */
+.fun-bar {
+    position: relative;
+    display: flex;
+    align-items: flex-end;
+}
+
+.fun-bar span {
+    width: 100%;
+    min-height: 2px;
+    background: #1db954;
+    border-radius: 4px 4px 0 0;
+}
+
+.fun-bar:hover span {
+    background: #3be477;
+}
+
+.fun-bar:hover::after {
+    content: attr(data-tip);
+    position: absolute;
+    bottom: calc(100% + 6px);
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 2;
+    padding: 0.3rem 0.55rem;
+    background: #181818;
+    border: 1px solid #444;
+    border-radius: 4px;
+    color: #f3f3f3;
+    font-size: 0.8rem;
+    white-space: nowrap;
+    pointer-events: none;
+}
+
+.fun-bar.start:hover::after {
+    left: 0;
+    transform: none;
+}
+
+.fun-bar.end:hover::after {
+    left: auto;
+    right: 0;
+    transform: none;
+}
+
+.fun-axis {
+    margin-top: 0.3rem;
+    color: #999;
+    font-size: 0.75rem;
+}
+
+/* Centred under their bar. They can be wider than it, and just spill over the empty ones beside them */
+.fun-axis span {
+    display: flex;
+    justify-content: center;
+    white-space: nowrap;
+}
+
+@media (max-width: 600px) {
+    .fun-charts {
+        grid-template-columns: 1fr;
+    }
+}
+
 /* --- SHARE IMAGE --- */
 
 .share-dialog {
