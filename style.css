@@ -1038,6 +1038,30 @@ dialog h3 {
     outline-offset: 2px;
 }
 
+/* The Look up genres button, under its explanation */
+.fun-action {
+    display: block;
+    margin: 0.75rem 0 0 0;
+    padding: 0.45rem 1rem;
+    font-size: 0.9rem;
+}
+
+/* A wide card's list goes in two columns, on screens wide enough for it */
+.fun-wide .fun-list {
+    columns: 2;
+    column-gap: 2rem;
+}
+
+.fun-wide .fun-list li {
+    break-inside: avoid;
+}
+
+@media (max-width: 600px) {
+    .fun-wide .fun-list {
+        columns: 1;
+    }
+}
+
 /* A card with charts in, across the whole grid */
 .fun-wide {
     grid-column: 1 / -1;

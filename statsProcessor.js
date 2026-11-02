@@ -1,6 +1,6 @@
-import { sOnEnd } from './timeBits.js?v=15';
-import { buildGraphData, drawGraph } from './graph.js?v=15';
-import { drawCard, themes, findAlbumCover } from './share.js?v=15';
+import { sOnEnd } from './timeBits.js?v=16';
+import { buildGraphData, drawGraph } from './graph.js?v=16';
+import { drawCard, themes, findAlbumCover } from './share.js?v=16';
 
 // 1. The Global State
 let appState = {
@@ -442,6 +442,8 @@ function setupEventListeners() {
             appState.listView = e.target.closest('.sub-tab').dataset.list;
             appState.shown = 50;
             render();
+        } else if (e.target.id == 'genre-start') {
+            startGenreLookup();
         } else if (e.target.closest('.fun-pick')) {
             // A name on the Fun tab, onto the graph like clicking it in the lists
             const pick = e.target.closest('.fun-pick').dataset;
@@ -1521,6 +1523,9 @@ function funHTML(periodRows) {
     const cards = [
         newArtistsCard(all, start, end, when),
         forgottenArtistsCard(all, start, end, when),
+        genresCard(rows),
+        genreErasCard(rows),
+        everPresentCard(rows),
         overlookedCard(rows),
         deepCutsCard(rows),
         skipCard(rows),
@@ -1529,8 +1534,15 @@ function funHTML(periodRows) {
         busiestDayCard(rows),
         streakCard(rows),
         comebackCard(rows),
+        flingsCard(rows, all),
         clockCard(rows),
+        dayStartersCard(rows),
+        lastThingCard(rows),
+        pickedCard(rows),
+        guiltyCard(rows),
+        offlineCard(rows),
         shuffleCard(rows),
+        songOfTheMonthCard(rows),
         varietyCard(rows),
         firstSongCard(rows)
     ].filter(card => card);
@@ -1543,7 +1555,7 @@ function funHTML(periodRows) {
 // One card: a title, a big headline, a line under it, and optionally a short list.
 // Each list item is { type, key, value } for an artist or song (clickable, onto the graph) or { text, value }
 // chart is extra HTML underneath (funBars), and makes the card the full width of the grid
-function funCard(title, big, detail, items = [], chart = '') {
+function funCard(title, big, detail, items = [], chart = '', wide = chart != '') {
     let list = '';
     for (const item of items) {
         let name;
@@ -1557,7 +1569,7 @@ function funCard(title, big, detail, items = [], chart = '') {
         }
         list += `<li><span class="fun-name">${name}</span><span class="fun-value">${escapeHTML(item.value)}</span></li>`;
     }
-    return `<section class="fun-card${chart ? ' fun-wide' : ''}">
+    return `<section class="fun-card${wide ? ' fun-wide' : ''}">
                 <h3>${title}</h3>
                 <p class="fun-big">${escapeHTML(big)}</p>
                 <p class="fun-detail">${detail}</p>
@@ -1847,6 +1859,322 @@ function firstSongCard(rows) {
     }
     if (!first) return null;
     return funCard('Where it started', funDate(first.playedAt), 'the first song you played', [{ type: 'song', key: first.songKey, value: '' }]);
+}
+
+// Artists in your top 10 for every year in the period (needs at least two years to mean anything)
+function everPresentCard(rows) {
+    const byYear = {};
+    for (const song of rows) {
+        if (!byYear[song.localYear]) byYear[song.localYear] = [];
+        byYear[song.localYear].push(song);
+    }
+    const years = Object.keys(byYear).sort();
+    if (years.length < 2) return null;
+    const timesInTop = {};
+    for (const year of years) {
+        for (const [key] of topArtists(byYear[year]).slice(0, 10)) timesInTop[key] = (timesInTop[key] || 0) + 1;
+    }
+    const ranked = Object.keys(timesInTop).sort((a, b) => timesInTop[b] - timesInTop[a]);
+    const every = ranked.filter(key => timesInTop[key] == years.length);
+    // Nobody in it every year is common (a first or last year that's only partly there), so then it's whoever's closest
+    const big = every.length > 0 ? `${every.length} artist${sOnEnd(every.length)}` : `${timesInTop[ranked[0]]} of ${years.length} years`;
+    const detail = every.length > 0 ? `in your top 10 every year from ${years[0]} to ${years[years.length - 1]}`
+                                    : `in your top 10 is the best anyone's managed, from ${years[0]} to ${years[years.length - 1]}`;
+    return funCard('Ever-presents', big, detail,
+        ranked.slice(0, 5).map(key => ({ type: 'artist', key: key, value: `top 10 in ${timesInTop[key]} of ${years.length} years` })));
+}
+
+// Songs you couldn't stop playing for a week, then barely touched: the busiest 7 days are most of their plays ever
+function flingsCard(rows, all) {
+    const ever = countBy(all, song => song.songKey);
+    const times = {};
+    for (const song of rows) {
+        if (!song.songKey || song.ms_played < minPlayMs) continue;
+        if (!times[song.songKey]) times[song.songKey] = [];
+        times[song.songKey].push(song.playedAt);
+    }
+    const found = [];
+    for (const key in times) {
+        if (times[key].length < 15) continue;
+        const t = times[key].sort((a, b) => a - b);
+        let best = 0, bestStart = 0;
+        for (let i = 0, j = 0; j < t.length; j++) {
+            while (t[j] - t[i] >= 7 * dayMs) i++;
+            if (j - i + 1 > best) {
+                best = j - i + 1;
+                bestStart = t[i];
+            }
+        }
+        if (best >= 15 && best / ever[key] >= 0.7) found.push({ key: key, week: best, rest: ever[key] - best, start: bestStart });
+    }
+    if (found.length == 0) return null;
+    found.sort((a, b) => b.week - a.week);
+    return funCard('Flings', found.length.toLocaleString(), 'songs you played 15+ times in a week, and hardly ever again',
+        found.slice(0, 5).map(f => ({ type: 'song', key: f.key, value: `${f.week} that week, ${f.rest} since` })));
+}
+
+// What you start and end your day with. A day runs from 5am, so a late night counts as the day before
+function dayEnds(rows) {
+    const first = {}, last = {};
+    for (const song of rows) {
+        if (!song.songKey || song.ms_played < minPlayMs) continue;
+        const day = dayNumber(song.playedAt - 5 * 60 * 60 * 1000);
+        if (!first[day] || song.playedAt < first[day].playedAt) first[day] = song;
+        if (!last[day] || song.playedAt > last[day].playedAt) last[day] = song;
+    }
+    return { first: Object.values(first), last: Object.values(last) };
+}
+
+function dayStartersCard(rows) {
+    const firsts = dayEnds(rows).first;
+    const counts = countBy(firsts, song => song.songKey);
+    const ranked = Object.keys(counts).sort((a, b) => counts[b] - counts[a]);
+    if (ranked.length == 0 || counts[ranked[0]] < 2) return null;
+    return funCard('Day starters', `${counts[ranked[0]]} mornings`, 'started with the same song, more than any other',
+        ranked.slice(0, 5).map(key => ({ type: 'song', key: key, value: `${counts[key]} days` })));
+}
+
+function lastThingCard(rows) {
+    const lasts = dayEnds(rows).last;
+    const counts = countBy(lasts, song => song.songKey);
+    const ranked = Object.keys(counts).sort((a, b) => counts[b] - counts[a]);
+    if (ranked.length == 0 || counts[ranked[0]] < 2) return null;
+    return funCard('Last thing at night', `${counts[ranked[0]]} nights`, 'ended on the same song, more than any other',
+        ranked.slice(0, 5).map(key => ({ type: 'song', key: key, value: `${counts[key]} nights` })));
+}
+
+// Spotify says why each song started. clickrow is you picking it from a list, everything else is it just playing next
+function pickedCard(rows) {
+    const known = rows.filter(song => song.reason_start != null);
+    if (known.length < 100) return null;
+    const picked = known.filter(song => song.reason_start == 'clickrow');
+    const counts = countBy(picked, song => song.songKey);
+    const ranked = Object.keys(counts).sort((a, b) => counts[b] - counts[a]);
+    return funCard('Picked by you', `${Math.round(picked.length / known.length * 100)}%`,
+        'of your Spotify songs were ones you picked yourself, the rest just played next. Your most picked:',
+        ranked.slice(0, 5).map(key => ({ type: 'song', key: key, value: plays(counts[key]) })));
+}
+
+// What you play in a private session, so it's kept out of Spotify's recommendations
+function guiltyCard(rows) {
+    const hidden = rows.filter(song => song.incognito_mode === true);
+    const counts = countBy(hidden, song => song.songKey);
+    const ranked = Object.keys(counts).sort((a, b) => counts[b] - counts[a]);
+    if (ranked.length == 0) return null;
+    const total = Object.values(counts).reduce((a, b) => a + b, 0);
+    return funCard('Guilty pleasures', plays(total), 'in a private session, where Spotify doesn\'t count it. What you were hiding:',
+        ranked.slice(0, 5).map(key => ({ type: 'song', key: key, value: plays(counts[key]) })));
+}
+
+// What you play with no signal (downloaded songs)
+function offlineCard(rows) {
+    const off = rows.filter(song => song.offline === true);
+    const counts = countBy(off, song => song.songKey);
+    const ranked = Object.keys(counts).sort((a, b) => counts[b] - counts[a]);
+    if (ranked.length == 0) return null;
+    const total = Object.values(counts).reduce((a, b) => a + b, 0);
+    return funCard('Offline', plays(total), 'with no signal, from downloaded songs. What you saved for the journey:',
+        ranked.slice(0, 5).map(key => ({ type: 'song', key: key, value: plays(counts[key]) })));
+}
+
+// Your top song for each month, newest first (up to the last 12 in the period)
+function songOfTheMonthCard(rows) {
+    const counts = countBy(rows, song => song.songKey ? `${song.localYear}-${String(song.localMonth).padStart(2, '0')}\n${song.songKey}` : null);
+    const best = {};
+    for (const key in counts) {
+        const month = key.slice(0, key.indexOf('\n'));
+        if (!best[month] || counts[key] > counts[best[month]]) best[month] = key;
+    }
+    const months = Object.keys(best).sort().reverse().slice(0, 12);
+    if (months.length < 2) return null;
+    const monthName = month => new Date(Number(month.slice(0, 4)), Number(month.slice(5))).toLocaleDateString(undefined, { month: 'short', year: 'numeric' });
+    return funCard('Song of the month', `${months.length} months`, months.length == 12 ? 'your top song for each of the last 12' : 'your top song for each one',
+        months.map(month => ({ type: 'song', key: best[month].slice(best[month].indexOf('\n') + 1), value: monthName(month) })), '', true);
+}
+
+// --- Genres, from MusicBrainz ---
+// None of the files say what genre anything is, so it's looked up on MusicBrainz, but only if you ask.
+// Your top 100 artists, a bit slower than one a second (their limit), remembered in the browser so it's only done once.
+// Each artist gets the genre most people have tagged them with, out of MusicBrainz's list of real genres
+// (people tag things "seen live" and "american" too)
+const genreSettingKey = 'unwrapper-genres-on';
+const genreCacheKey = 'unwrapper-genres';
+const genreListKey = 'unwrapper-genre-list';
+const genreArtists = 100;
+let genreLookup = { running: false, done: 0, total: 0, failed: 0 };
+
+function genresOn() {
+    try {
+        return localStorage.getItem(genreSettingKey) == 'on';
+    } catch (err) {
+        return false;
+    }
+}
+
+function genreCache() {
+    try {
+        return JSON.parse(localStorage.getItem(genreCacheKey) || '{}') || {};
+    } catch (err) {
+        return {};
+    }
+}
+
+function saveGenreCache(cache) {
+    try {
+        localStorage.setItem(genreCacheKey, JSON.stringify(cache));
+    } catch (err) {
+        // Can't save, it'll look them up again next time
+    }
+}
+
+// The artists worth looking up: most played across everything, so changing the date filter doesn't need more
+function genreArtistKeys() {
+    return topArtists(appState.data).slice(0, genreArtists).map(entry => entry[0]);
+}
+
+// Genre for each artist key that's been looked up and has one
+function artistGenres() {
+    const cache = genreCache();
+    const genres = {};
+    for (const key in appState.names.artist) {
+        const found = cache[key];
+        if (found) genres[key] = found;
+    }
+    return genres;
+}
+
+// They answer 503 when it's too fast for them, or just busy (it happens a lot), so wait longer each time:
+// 2, 4, 8, then 16 seconds until it's been about 2 minutes, then give up for now
+async function getMusicBrainz(url) {
+    let wait = 2000;
+    for (let waited = 0; ; waited += wait, wait = Math.min(wait * 2, 16000)) {
+        const response = await fetch(url, { headers: { Accept: 'application/json' } });
+        if (response.ok) return response;
+        if (response.status != 503 || waited >= 120000) throw new Error(`${response.status} from MusicBrainz`);
+        await new Promise(resolve => setTimeout(resolve, wait));
+    }
+}
+
+async function genreList() {
+    try {
+        const saved = JSON.parse(localStorage.getItem(genreListKey) || 'null');
+        if (Array.isArray(saved) && saved.length > 0) return new Set(saved);
+    } catch (err) {
+        // Look it up instead
+    }
+    const text = await (await getMusicBrainz('https://musicbrainz.org/ws/2/genre/all?fmt=txt')).text();
+    const list = text.split('\n').map(line => line.trim()).filter(line => line);
+    try {
+        localStorage.setItem(genreListKey, JSON.stringify(list));
+    } catch (err) {
+        // Fine, it'll be fetched again next time
+    }
+    return new Set(list);
+}
+
+// One artist: only a confident match (score 100) with the same name counts, then their most tagged genre.
+// Gives back the genre, or '' if there isn't one (remembered, so it's not looked up again)
+async function lookUpGenre(artist, genres) {
+    const query = encodeURIComponent(`artist:"${artist.replace(/"/g, '')}"`);
+    const result = await (await getMusicBrainz(`https://musicbrainz.org/ws/2/artist/?query=${query}&fmt=json&limit=5`)).json();
+    const match = (result.artists || []).find(a => a.score == 100 && nameKey(a.name) == nameKey(artist));
+    if (!match) return '';
+    const tags = (match.tags || []).filter(tag => genres.has(tag.name)).sort((a, b) => b.count - a.count);
+    return tags.length > 0 ? tags[0].name : '';
+}
+
+async function startGenreLookup() {
+    if (genreLookup.running) return;
+    try {
+        localStorage.setItem(genreSettingKey, 'on');
+    } catch (err) {
+        // Won't be remembered, but still works for now
+    }
+    const cache = genreCache();
+    const todo = genreArtistKeys().filter(key => !(key in cache));
+    genreLookup = { running: true, done: 0, total: todo.length, failed: 0 };
+    rerenderFun();
+    try {
+        const genres = await genreList();
+        for (const key of todo) {
+            // Counted from the start of each, so a slow answer doesn't make it slower still
+            const started = Date.now();
+            // If MusicBrainz is too busy, this throws and the rest wait for Try again (or the next visit)
+            cache[key] = await lookUpGenre(appState.names.artist[key].name, genres);
+            saveGenreCache(cache);
+            genreLookup.done++;
+            // The count goes up every time, but the cards only get redrawn every 20, since that's slow with years of data
+            const status = document.getElementById('genre-status');
+            if (status) status.textContent = genreStatusText();
+            if (genreLookup.done % 20 == 0) rerenderFun();
+            await new Promise(resolve => setTimeout(resolve, Math.max(0, 1500 - (Date.now() - started))));
+        }
+    } catch (err) {
+        console.error("Couldn't look up genres:", err);
+        genreLookup.failed = genreLookup.total - genreLookup.done;
+    }
+    genreLookup.running = false;
+    rerenderFun();
+    announce(genreLookup.failed ? `MusicBrainz is busy, ${genreLookup.failed} artists are still to do.` : 'Genres looked up.');
+}
+
+function genreStatusText() {
+    return ` Looking up artists, ${genreLookup.done} of ${genreLookup.total} so far...`;
+}
+
+function rerenderFun() {
+    if (appState.currentView == 'fun') render();
+}
+
+// Shares of your listening by genre, out of the artists that have one
+function genresCard(rows) {
+    if (!genresOn() && !genreLookup.running) {
+        return funCard('Genres', '?', `None of your files say what genre anything is, but MusicBrainz knows. This looks up your top ${genreArtists} artists there,
+                       one every second or so (a few minutes when they're busy), and remembers them, so it's only slow the first time. Only the artists' names are sent.
+                       <button id="genre-start" type="button" class="secondary-btn fun-action">Look up genres</button>`);
+    }
+    // Looked up before, but there's new artists in the top 100 now (a new upload), so carry on in the background
+    if (!genreLookup.running && !genreLookup.failed && genreArtistKeys().some(key => !(key in genreCache()))) {
+        setTimeout(startGenreLookup, 0);
+    }
+
+    const genres = artistGenres();
+    const time = {};
+    let covered = 0, total = 0;
+    for (const song of rows) {
+        total += song.ms_played;
+        const genre = genres[song.artistKey];
+        if (!genre) continue;
+        time[genre] = (time[genre] || 0) + song.ms_played;
+        covered += song.ms_played;
+    }
+    const ranked = Object.keys(time).sort((a, b) => time[b] - time[a]);
+    let status = '';
+    if (genreLookup.running) status = `<span id="genre-status">${genreStatusText()}</span>`;
+    else if (genreLookup.failed) status = ` MusicBrainz is too busy at the moment, so ${genreLookup.failed} artists are still to do. <button id="genre-start" type="button" class="secondary-btn fun-action">Try again</button>`;
+    if (ranked.length == 0) return funCard('Genres', '...', `Nothing yet.${status}`);
+
+    return funCard('Top genres', ranked[0], `is your top genre, out of the ${Math.round(covered / total * 100)}% of your listening whose artists have one on MusicBrainz.${status}`,
+        ranked.slice(0, 8).map(genre => ({ text: genre, value: `${Math.round(time[genre] / covered * 100)}%` })));
+}
+
+// Your top genre each year, like the eras on the Wrapped tab
+function genreErasCard(rows) {
+    if (!genresOn()) return null;
+    const genres = artistGenres();
+    const byYear = {};
+    for (const song of rows) {
+        const genre = genres[song.artistKey];
+        if (!genre) continue;
+        if (!byYear[song.localYear]) byYear[song.localYear] = {};
+        byYear[song.localYear][genre] = (byYear[song.localYear][genre] || 0) + song.ms_played;
+    }
+    const years = Object.keys(byYear).sort().reverse();
+    if (years.length < 2) return null;
+    const top = year => Object.keys(byYear[year]).sort((a, b) => byYear[year][b] - byYear[year][a]);
+    const changes = years.filter((year, i) => i < years.length - 1 && top(year)[0] != top(years[i + 1])[0]).length;
+    return funCard('Genre eras', `${changes} change${sOnEnd(changes)}`, 'of top genre over the years. Your top two each year:',
+        years.map(year => ({ text: year, value: top(year).slice(0, 2).join(', ') })));
 }
 
 // 14. Excluding things from the stats

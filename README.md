@@ -21,7 +21,7 @@ The video and podcast files are fine to include too, they just get left out of t
 - Graph your listening over time. Click anything in the lists, or search for it, to put it on the graph, and compare up to eight artists, albums or songs at once. Click a month or drag across a stretch to zoom in (right-click to zoom back out). The lists follow the same dates, and you can filter both by artist, album or song from either one, so you can see exactly what you were playing.
 - Right-click (or tap and hold on a phone) anything in the lists or on the Fun tab to see it on the graph, find it on Spotify, or exclude it.
 - Make your own Wrapped for any year, or all time: your top artists, songs and album and how many minutes you listened, on a card to share, in whatever colours you like. Your eras are underneath, your top artists year by year.
-- Dig through the Fun tab: new and forgotten artists, ones where you only ever play one song, your skip rate, the songs you never skip, your biggest day, longest streak, comebacks, what time you listen and more. It follows the date filter too.
+- Dig through the Fun tab: new and forgotten artists, your genres, ever-presents, ones where you only ever play one song, your skip rate, flings, guilty pleasures, what you start and end the day with, your song of each month, your biggest day, longest streak, comebacks, what time you listen and more. It follows the date filter too.
 - Exclude anything you don't want counted, like sleep sounds or someone else using your account (also in the settings). It's remembered for next time.
 
 ## How it counts
@@ -33,6 +33,8 @@ A play only counts if you listened for at least 30 seconds, which is the same ru
 I'm a computer scientist, not a data harvester. Everything happens in your browser: your files never get uploaded anywhere, I never see them and neither does the server.
 
 The one exception is album covers on the Wrapped card. For each year you look at on the Wrapped tab, it looks for the cover of that year's top artist's top album, so the artist and album names get looked up on Apple's iTunes search. Nothing else gets sent, and you can turn it off under Customise, which it remembers.
+
+Genres on the Fun tab are the other one. Your files don't say what genre anything is, so if you press Look up genres, the names of your top 100 artists get looked up on [MusicBrainz](https://musicbrainz.org/). That only happens if you ask, and the answers are kept in your browser so it's only done once.
 
 ## Moved off Spotify?
 
