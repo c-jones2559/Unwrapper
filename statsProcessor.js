@@ -1528,8 +1528,6 @@ function funHTML(periodRows) {
         everPresentCard(rows),
         overlookedCard(rows),
         deepCutsCard(rows),
-        skipCard(rows),
-        neverSkippedCard(rows),
         obsessionCard(rows),
         busiestDayCard(rows),
         streakCard(rows),
@@ -1538,10 +1536,6 @@ function funHTML(periodRows) {
         clockCard(rows),
         dayStartersCard(rows),
         lastThingCard(rows),
-        pickedCard(rows),
-        guiltyCard(rows),
-        offlineCard(rows),
-        shuffleCard(rows),
         songOfTheMonthCard(rows),
         varietyCard(rows),
         firstSongCard(rows)
@@ -1687,47 +1681,6 @@ function deepCutsCard(rows) {
         ranked.slice(0, 5).map(key => ({ type: 'artist', key: key, value: `${songs[key].size.toLocaleString()} songs` })));
 }
 
-// Spotify says how each play ended. A skip is pressing next (or Spotify's own skipped flag).
-// Navidrome doesn't say, so it's left out of this one
-function isSkip(song) {
-    return song.reason_end == 'fwdbtn' || song.skipped === true;
-}
-
-function skipRows(rows) {
-    return rows.filter(song => song.reason_end != null || song.skipped != null);
-}
-
-function skipCard(rows) {
-    const known = skipRows(rows);
-    if (known.length < 100) return null;
-    const skips = known.filter(isSkip).length;
-    // Most skipped songs: out of ones started at least 10 times
-    const started = {}, skipped = {};
-    for (const song of known) {
-        started[song.songKey] = (started[song.songKey] || 0) + 1;
-        if (isSkip(song)) skipped[song.songKey] = (skipped[song.songKey] || 0) + 1;
-    }
-    const worst = Object.keys(skipped).filter(key => started[key] >= 10)
-        .sort((a, b) => skipped[b] / started[b] - skipped[a] / started[a] || started[b] - started[a]);
-    return funCard('Skip rate', `${Math.round(skips / known.length * 100)}%`, `of songs skipped, ${skips.toLocaleString()} of ${known.length.toLocaleString()}. These get skipped the most:`,
-        worst.slice(0, 5).map(key => ({ type: 'song', key: key, value: `${skipped[key]} of ${started[key]}` })));
-}
-
-// The opposite: your most played songs that you've never once skipped
-function neverSkippedCard(rows) {
-    const known = skipRows(rows);
-    if (known.length < 100) return null;
-    const counts = countBy(known, song => song.songKey);
-    const skippedOnce = {};
-    for (const song of known) {
-        if (isSkip(song)) skippedOnce[song.songKey] = true;
-    }
-    const found = Object.keys(counts).filter(key => !skippedOnce[key] && counts[key] >= 10).sort((a, b) => counts[b] - counts[a]);
-    if (found.length == 0) return null;
-    return funCard('Never skipped', found.length.toLocaleString(), 'songs played 10+ times that you\'ve never skipped once',
-        found.slice(0, 5).map(key => ({ type: 'song', key: key, value: plays(counts[key]) })));
-}
-
 // The most times you've played one song in a single day
 function obsessionCard(rows) {
     const counts = countBy(rows, song => `${dayNumber(song.playedAt)}\n${song.songKey}`);
@@ -1830,17 +1783,6 @@ function clockCard(rows) {
         [], charts);
 }
 
-// How much is on shuffle, and how often you let a song finish. Spotify only, Navidrome doesn't say
-function shuffleCard(rows) {
-    const known = rows.filter(song => typeof song.shuffle == 'boolean');
-    if (known.length < 100) return null;
-    const shuffled = known.filter(song => song.shuffle).length;
-    const ended = known.filter(song => song.reason_end != null);
-    const finished = ended.filter(song => song.reason_end == 'trackdone').length;
-    const items = ended.length > 0 ? [{ text: 'Songs you let finish', value: `${Math.round(finished / ended.length * 100)}%` }] : [];
-    return funCard('Shuffle', `${Math.round(shuffled / known.length * 100)}%`, 'of your Spotify listening was on shuffle', items);
-}
-
 // How many different artists, songs and albums
 function varietyCard(rows) {
     const count = field => new Set(rows.map(song => song[field]).filter(key => key)).size;
@@ -1941,40 +1883,6 @@ function lastThingCard(rows) {
     if (ranked.length == 0 || counts[ranked[0]] < 2) return null;
     return funCard('Last thing at night', `${counts[ranked[0]]} nights`, 'ended on the same song, more than any other',
         ranked.slice(0, 5).map(key => ({ type: 'song', key: key, value: `${counts[key]} nights` })));
-}
-
-// Spotify says why each song started. clickrow is you picking it from a list, everything else is it just playing next
-function pickedCard(rows) {
-    const known = rows.filter(song => song.reason_start != null);
-    if (known.length < 100) return null;
-    const picked = known.filter(song => song.reason_start == 'clickrow');
-    const counts = countBy(picked, song => song.songKey);
-    const ranked = Object.keys(counts).sort((a, b) => counts[b] - counts[a]);
-    return funCard('Picked by you', `${Math.round(picked.length / known.length * 100)}%`,
-        'of your Spotify songs were ones you picked yourself, the rest just played next. Your most picked:',
-        ranked.slice(0, 5).map(key => ({ type: 'song', key: key, value: plays(counts[key]) })));
-}
-
-// What you play in a private session, so it's kept out of Spotify's recommendations
-function guiltyCard(rows) {
-    const hidden = rows.filter(song => song.incognito_mode === true);
-    const counts = countBy(hidden, song => song.songKey);
-    const ranked = Object.keys(counts).sort((a, b) => counts[b] - counts[a]);
-    if (ranked.length == 0) return null;
-    const total = Object.values(counts).reduce((a, b) => a + b, 0);
-    return funCard('Guilty pleasures', plays(total), 'in a private session, where Spotify doesn\'t count it. What you were hiding:',
-        ranked.slice(0, 5).map(key => ({ type: 'song', key: key, value: plays(counts[key]) })));
-}
-
-// What you play with no signal (downloaded songs)
-function offlineCard(rows) {
-    const off = rows.filter(song => song.offline === true);
-    const counts = countBy(off, song => song.songKey);
-    const ranked = Object.keys(counts).sort((a, b) => counts[b] - counts[a]);
-    if (ranked.length == 0) return null;
-    const total = Object.values(counts).reduce((a, b) => a + b, 0);
-    return funCard('Offline', plays(total), 'with no signal, from downloaded songs. What you saved for the journey:',
-        ranked.slice(0, 5).map(key => ({ type: 'song', key: key, value: plays(counts[key]) })));
 }
 
 // Your top song for each month, newest first (up to the last 12 in the period)
