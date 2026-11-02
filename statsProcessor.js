@@ -16,7 +16,8 @@ let appState = {
     // Each is { type, key, label, colour } with the same keys as topArtists/topAlbums/topSongs
     graphSeries: [],
     graphType: 'artist', // What the search box is searching for: 'artist', 'album' or 'song'
-    searchIndex: {} // Everything you can search for, built once on load
+    searchIndex: {}, // Everything you can search for, built once on load
+    names: {} // How to spell each artist/song/album key, also built once on load
 };
 
 // 2. The Initializer
@@ -39,6 +40,7 @@ export function calculateStats(songs) {
         song.playedAt = date.getTime();
     }
     appState.allData = songs;
+    buildNameKeys(songs);
     buildSearchIndex(songs);
 
     document.getElementById('bento-grid').classList.remove('hidden');
@@ -385,11 +387,11 @@ function showGraph(data) {
     fillSuggestions('');
 }
 
+// Uses the same lowercase keys as the lists, so this ignores capitals too
 function matchesPick(song, pick) {
-    const artist = song.master_metadata_album_artist_name;
-    if (pick.type == 'artist') return artist == pick.key;
-    if (pick.type == 'album') return `${artist}\n${song.master_metadata_album_album_name}` == pick.key;
-    return `${artist}\n${song.master_metadata_track_name}` == pick.key;
+    if (pick.type == 'artist') return song.artistKey == pick.key;
+    if (pick.type == 'album') return song.albumKey == pick.key;
+    return song.songKey == pick.key;
 }
 
 function isPicked(type, key) {
@@ -480,19 +482,63 @@ function totalTime(songs) {
     }, 0);
 }
 
+// Spotify and Navidrome don't always agree on capitals ("Bring Me The Horizon" vs "Bring Me the Horizon"),
+// so everything's grouped by a lowercase key. They're worked out once on load rather than every render,
+// and each key shows whichever spelling turns up most across all the data, so names don't change with the filter
+function buildNameKeys(songs) {
+    const spellings = { artist: {}, song: {}, album: {} };
+    for (const song of songs) {
+        const artist = song.master_metadata_album_artist_name;
+        const track = song.master_metadata_track_name;
+        const album = song.master_metadata_album_album_name;
+        if (artist) {
+            song.artistKey = artist.toLowerCase();
+            countSpelling(spellings.artist, song.artistKey, artist, { name: artist });
+        }
+        if (track) {
+            // Key on artist too, otherwise every song called "Intro" gets lumped together
+            song.songKey = `${artist}\n${track}`.toLowerCase();
+            countSpelling(spellings.song, song.songKey, `${artist}\n${track}`, { name: track, artist: artist });
+        }
+        if (album) {
+            // Same as songs, loads of artists have an album called "Greatest Hits"
+            song.albumKey = `${artist}\n${album}`.toLowerCase();
+            countSpelling(spellings.album, song.albumKey, `${artist}\n${album}`, { name: album, artist: artist });
+        }
+    }
+
+    appState.names = { artist: {}, song: {}, album: {} };
+    for (const type in spellings) {
+        for (const key in spellings[type]) {
+            appState.names[type][key] = commonest(spellings[type][key]);
+        }
+    }
+}
+
+function countSpelling(counts, key, spelling, parts) {
+    if (!counts[key]) counts[key] = {};
+    if (!counts[key][spelling]) counts[key][spelling] = { n: 0, parts: parts };
+    counts[key][spelling].n++;
+}
+
+function commonest(spellings) {
+    let best = null;
+    for (const spelling in spellings) {
+        if (best == null || spellings[spelling].n > best.n) best = spellings[spelling];
+    }
+    return best.parts;
+}
+
 function topSongs(songs) {
     const stats = {};
     for (const song of songs) {
-        const name = song.master_metadata_track_name;
-        const artist = song.master_metadata_album_artist_name;
-        if (name) {
-            // Key on artist too, otherwise every song called "Intro" gets lumped together
-            const key = `${artist}\n${name}`;
-            if (!stats[key]) stats[key] = {
-                name: name,
-                count: 0,
-                time: 0,
-                artist: artist
+        const key = song.songKey;
+        if (key) {
+            if (!stats[key]) stats[key] = { 
+                name: appState.names.song[key].name,
+                count: 0, 
+                time: 0, 
+                artist: appState.names.song[key].artist 
             };
             if (song.ms_played >= minPlayMs) stats[key].count++;
             stats[key].time += song.ms_played || 0;
@@ -504,11 +550,11 @@ function topSongs(songs) {
 function topArtists(songs) {
     const stats = {};
     for (const song of songs) {
-        const name = song.master_metadata_album_artist_name;
-        if (name) {
-            if (!stats[name]) stats[name] = { name: name, count: 0, time: 0 }; // No artist line needed, it's the name
-            if (song.ms_played >= minPlayMs) stats[name].count++;
-            stats[name].time += song.ms_played || 0;
+        const key = song.artistKey;
+        if (key) {
+            if (!stats[key]) stats[key] = { name: appState.names.artist[key].name, count: 0, time: 0 }; // No artist line needed, it's the name
+            if (song.ms_played >= minPlayMs) stats[key].count++;
+            stats[key].time += song.ms_played || 0;
         }
     }
     return Object.entries(stats).sort((a, b) => b[1].count - a[1].count);
@@ -517,16 +563,13 @@ function topArtists(songs) {
 function topAlbums(songs) {
     const stats = {};
     for (const song of songs) {
-        const name = song.master_metadata_album_album_name;
-        const artist = song.master_metadata_album_artist_name;
-        if (name) {
-            // Same as songs, loads of artists have an album called "Greatest Hits"
-            const key = `${artist}\n${name}`;
-            if (!stats[key]) stats[key] = {
-                name: name,
-                count: 0,
-                time: 0,
-                artist: artist
+        const key = song.albumKey;
+        if (key) {
+            if (!stats[key]) stats[key] = { 
+                name: appState.names.album[key].name,
+                count: 0, 
+                time: 0, 
+                artist: appState.names.album[key].artist 
             };
             if (song.ms_played >= minPlayMs) stats[key].count++;
             stats[key].time += song.ms_played || 0;
