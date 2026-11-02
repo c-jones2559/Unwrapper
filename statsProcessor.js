@@ -130,8 +130,8 @@ function render() {
     // Filter data
     const filteredData = filterDataByTime(appState.data);
 
-    // Update Header Stats
-    updateBentoStats(filteredData);
+    // Update Header Stats. These are the same top songs and artists the list needs, so keep them
+    const top = updateBentoStats(filteredData);
 
     if (appState.currentView === 'graph') {
         holdHeight(viewport, () => {
@@ -148,9 +148,9 @@ function render() {
     }
     let sortedData = [];
     if (appState.listView === 'songs') {
-        sortedData = topSongs(listData);
+        sortedData = listData === filteredData ? top.songs : topSongs(listData);
     } else if (appState.listView === 'artists') {
-        sortedData = topArtists(listData);
+        sortedData = listData === filteredData ? top.artists : topArtists(listData);
     } else {
         sortedData = topAlbums(listData);
     }
@@ -218,6 +218,7 @@ function updateBentoStats(data) {
 
     document.getElementById('top-song-display').innerText = songs.length > 0 ? songs[0][1].name : "-";
     document.getElementById('top-artist-display').innerText = artists.length > 0 ? artists[0][1].name : "-";
+    return { songs: songs, artists: artists };
 }
 
 // The graph is empty for a moment while it's rebuilt, and measuring its width makes the browser
