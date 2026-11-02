@@ -103,6 +103,29 @@
         </div>
     </dialog>
 
+    <!-- The shareable eras image. Opened from the Eras tab -->
+    <dialog id="share-dialog" class="share-dialog" aria-labelledby="share-title">
+        <h3 id="share-title">Share your eras</h3>
+        <div class="share-layout">
+            <canvas id="share-canvas" width="1080" height="1920" role="img" aria-label="Preview of the image"></canvas>
+            <div class="share-controls">
+                <p class="dialog-help" id="share-range-note"></p>
+                <h4>Colours</h4>
+                <div id="theme-swatches" class="theme-swatches" role="group" aria-label="Colour themes"></div>
+                <div class="custom-colours">
+                    <label>Top <input type="color" id="colour-top"></label>
+                    <label>Bottom <input type="color" id="colour-bottom"></label>
+                    <label>Text <input type="color" id="colour-text"></label>
+                </div>
+                <div class="dialog-actions">
+                    <button id="share-close" type="button" class="secondary-btn">Close</button>
+                    <button id="share-native" type="button" class="hidden">Share</button>
+                    <button id="share-download" type="button">Download</button>
+                </div>
+            </div>
+        </div>
+    </dialog>
+
     <!-- <script src="fileReader.js?v=3"></script> -->
     <!-- <script src="statsProcessor.js"></script> -->
 </body>

@@ -1,5 +1,6 @@
 import { msToHours, sOnEnd } from './timeBits.js?v=3';
 import { buildGraphData, drawGraph } from './graph.js?v=3';
+import { drawEraCard, themes } from './share.js?v=3';
 
 // 1. The Global State
 let appState = {
@@ -21,6 +22,8 @@ let appState = {
     suggestBox: 'graph-search',
     activeSuggestion: -1,
     eras: null, // The eras on screen, kept for making the share image
+    shareCard: null, // What's on the share image, and its colours
+    shareTheme: { top: '#108239', bottom: '#06301a', text: '#ffffff' },
     excluded: [], // Anything left out of the stats, each { type, key, label }. Remembered between visits
     excludedKeys: { artist: {}, album: {}, song: {} },
     listType: 'song', // What's in the list on screen, and the keys in order, for clicking a row
@@ -251,6 +254,8 @@ function setupEventListeners() {
             removeGraphPick(Number(e.target.dataset.index));
         } else if (e.target.closest('.list-item')) {
             graphFromList(Number(e.target.closest('.list-item').dataset.index));
+        } else if (e.target.id == 'share-btn') {
+            openShareWindow();
         } else if (e.target.id == 'graph-clear') {
             appState.graphSeries = [];
             render();
@@ -278,6 +283,28 @@ function setupEventListeners() {
         } else if (e.target.classList.contains('exclude-remove')) {
             removeExclusion(Number(e.target.dataset.index));
         }
+    });
+
+    // The share window
+    document.getElementById('theme-swatches').addEventListener('click', (e) => {
+        const swatch = e.target.closest('.theme-swatch');
+        if (!swatch) return;
+        appState.shareTheme = { ...themes[Number(swatch.dataset.index)] };
+        buildSwatches();
+        setColourInputs();
+        redrawShare();
+    });
+    for (const [id, part] of [['colour-top', 'top'], ['colour-bottom', 'bottom'], ['colour-text', 'text']]) {
+        document.getElementById(id).addEventListener('input', (e) => {
+            appState.shareTheme = { ...appState.shareTheme, [part]: e.target.value };
+            buildSwatches(); // None of the presets will be lit up any more
+            redrawShare();
+        });
+    }
+    document.getElementById('share-download').addEventListener('click', downloadShareImage);
+    document.getElementById('share-native').addEventListener('click', shareShareImage);
+    document.getElementById('share-close').addEventListener('click', () => {
+        document.getElementById('share-dialog').close();
     });
 
     // The exclude window
@@ -745,6 +772,7 @@ function buildEras(data) {
         eras.push({
             label: byMonth ? start.toLocaleDateString(undefined, { month: 'long', year: 'numeric' }) : String(year),
             shortLabel: byMonth ? start.toLocaleDateString(undefined, { month: 'short' }) : String(year),
+            start: start.getTime(),
             top: top,
             partial: start.getTime() < from || end.getTime() > to // Only some of it's in the range, like this year so far
         });
@@ -784,7 +812,132 @@ function erasHTML(result) {
     return html + `</div>`;
 }
 
-// 12. Excluding things from the stats
+// 12. The shareable eras image (the drawing's in share.js)
+// What goes on the image, from whatever eras are on screen. Long histories only show the most recent ones
+function shareCardInfo() {
+    const result = appState.eras;
+    const maxRows = result.unit == 'month' ? 13 : 10;
+    let eras = result.eras;
+    let note = '';
+    if (eras.length > maxRows) {
+        eras = eras.slice(-maxRows);
+        note = `Showing the last ${maxRows} ${result.unit}s`;
+    }
+
+    const first = new Date(result.from);
+    const last = new Date(result.to - 1);
+    const sameYear = first.getFullYear() == last.getFullYear();
+
+    let title, range;
+    if (result.unit == 'year') {
+        title = 'My listening eras';
+        range = sameYear ? String(first.getFullYear()) : `${first.getFullYear()} – ${last.getFullYear()}`;
+    } else {
+        title = sameYear ? `My ${first.getFullYear()}, month by month` : 'Month by month';
+        const monthYear = d => d.toLocaleDateString(undefined, { month: 'long', year: 'numeric' });
+        range = monthYear(first) == monthYear(last) ? monthYear(first) : `${monthYear(first)} – ${monthYear(last)}`;
+    }
+
+    const hours = Math.round(totalTime(filterDataByTime(appState.data)) / (1000*60*60));
+    return {
+        title: title,
+        range: range,
+        summary: `${hours.toLocaleString()} hour${sOnEnd(hours)} of music`,
+        // Months get their year added if the range goes over New Year, otherwise there'd be two Januaries
+        rows: eras.map(era => ({
+            label: result.unit == 'year' ? era.label
+                 : new Date(era.start).toLocaleDateString(undefined, sameYear ? { month: 'short' } : { month: 'short', year: '2-digit' }),
+            top: era.top.map(entry => entry[1].name)
+        })),
+        compact: result.unit == 'month',
+        note: note
+    };
+}
+
+function openShareWindow() {
+    if (!appState.eras || appState.eras.eras.length == 0) return;
+    appState.shareCard = shareCardInfo();
+    document.getElementById('share-range-note').textContent =
+        `This covers ${appState.shareCard.range}. To change that, close this and pick different dates with the date filter at the top.`;
+    buildSwatches();
+    setColourInputs();
+    document.getElementById('share-dialog').showModal();
+    redrawShare();
+}
+
+// The preset colour buttons
+function buildSwatches() {
+    const holder = document.getElementById('theme-swatches');
+    holder.innerHTML = '';
+    for (let i = 0; i < themes.length; i++) {
+        const swatch = document.createElement('button');
+        swatch.type = 'button';
+        swatch.className = 'theme-swatch';
+        swatch.dataset.index = i;
+        swatch.style.background = `linear-gradient(135deg, ${themes[i].top}, ${themes[i].bottom})`;
+        swatch.setAttribute('aria-label', themes[i].name);
+        swatch.title = themes[i].name;
+        swatch.setAttribute('aria-pressed', sameColours(themes[i], appState.shareTheme));
+        holder.appendChild(swatch);
+    }
+}
+
+function sameColours(a, b) {
+    return a.top == b.top && a.bottom == b.bottom && a.text == b.text;
+}
+
+function setColourInputs() {
+    document.getElementById('colour-top').value = appState.shareTheme.top;
+    document.getElementById('colour-bottom').value = appState.shareTheme.bottom;
+    document.getElementById('colour-text').value = appState.shareTheme.text;
+}
+
+// Redraws the preview, then makes the PNG a moment later. It's made ahead of time because
+// phones only let a page share if it does it straight away when the button's pressed
+let shareFile = null;
+let blobTimer = null;
+function redrawShare() {
+    const canvas = document.getElementById('share-canvas');
+    drawEraCard(canvas, appState.shareCard, appState.shareTheme);
+    shareFile = null;
+    updateShareButtons();
+    clearTimeout(blobTimer);
+    blobTimer = setTimeout(() => {
+        canvas.toBlob(blob => {
+            if (!blob) return;
+            shareFile = new File([blob], 'unwrapper-eras.png', { type: 'image/png' });
+            updateShareButtons();
+        }, 'image/png');
+    }, 150);
+}
+
+// Share only shows if the browser can actually share files (most phones, hardly any computers)
+function updateShareButtons() {
+    document.getElementById('share-download').disabled = shareFile == null;
+    const native = document.getElementById('share-native');
+    const canShare = shareFile != null && navigator.canShare && navigator.canShare({ files: [shareFile] });
+    native.classList.toggle('hidden', !canShare);
+}
+
+function downloadShareImage() {
+    if (!shareFile) return;
+    const url = URL.createObjectURL(shareFile);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = shareFile.name;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+function shareShareImage() {
+    if (!shareFile) return;
+    navigator.share({ files: [shareFile], title: 'My listening eras', text: 'Made with unwrapper.cjones.cymru' })
+        .catch(() => {}); // Closing the share menu counts as an error, which isn't worth mentioning
+}
+
+// 13. Excluding things from the stats
 // Anything excluded gets taken out of the data everything else works from, so all the numbers agree
 const excludedStorageKey = 'unwrapper-excluded';
 
