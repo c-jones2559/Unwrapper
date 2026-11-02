@@ -72,7 +72,12 @@ function updateBentoStats(data) {
 }
 
 // 6. Setup Event Listeners
+// Only set them up once, otherwise pressing Process again doubles every click
+let listenersSet = false;
 function setupEventListeners() {
+    if (listenersSet) return;
+    listenersSet = true;
+
     document.querySelectorAll('.tab-btn').forEach(btn => {
         btn.addEventListener('click', (e) => {
             document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
