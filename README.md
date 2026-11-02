@@ -18,7 +18,7 @@ The video and podcast files are fine to include too, they just get left out of t
 
 - See your top songs, artists and albums for all time, a year, a month, or any dates you pick.
 - Sort by how many times you played something, or by how long you actually spent listening to it (in the settings, behind the gear).
-- Graph your listening over time. Click anything in the lists, or search for it, to put it on the graph, and compare up to eight artists, albums or songs at once.
+- Graph your listening over time. Click anything in the lists, or search for it, to put it on the graph, and compare up to eight artists, albums or songs at once. Click a month, or drag across a stretch, to zoom in, then "See the songs" shows exactly what you were playing.
 - Make your own Wrapped for any year, or all time: your top artists, songs and album and how many minutes you listened, on a card to share, in whatever colours you like. Your eras are underneath, your top artists year by year.
 - Exclude anything you don't want counted, like sleep sounds or someone else using your account (also in the settings). It's remembered for next time.
 

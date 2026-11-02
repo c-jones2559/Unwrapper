@@ -1,6 +1,6 @@
-import { msToHours, sOnEnd } from './timeBits.js?v=5';
-import { buildGraphData, drawGraph } from './graph.js?v=5';
-import { drawCard, themes, findAlbumCover } from './share.js?v=5';
+import { msToHours, sOnEnd } from './timeBits.js?v=6';
+import { buildGraphData, drawGraph } from './graph.js?v=6';
+import { drawCard, themes, findAlbumCover } from './share.js?v=6';
 
 // 1. The Global State
 let appState = {
@@ -27,6 +27,8 @@ let appState = {
     shareTheme: { ...themes[0] }, // The card's colours
     shareCovers: true, // Whether to look up the top artist's album cover
     coverCache: {}, // Covers looked up so far, by artist and album: { status, cover }
+    zoomStack: [], // Where the date filter was before each zoom on the graph, for Zoom out
+    listFilter: [], // From the graph's "See the songs": only show songs by/on these. Each { type, key, label }
     excluded: [], // Anything left out of the stats, each { type, key, label }. Remembered between visits
     excludedKeys: { artist: {}, album: {}, song: {} },
     listType: 'song', // What's in the list on screen, and the keys in order, for clicking a row
@@ -43,6 +45,8 @@ export function calculateStats(songs) {
     appState.timeFilter = 'all';
     appState.monthFilter = 'all';
     appState.graphSeries = [];
+    appState.zoomStack = [];
+    appState.listFilter = [];
     appState.shown = 50;
     document.getElementById('month-range').classList.add('hidden');
     document.getElementById('custom-range').classList.add('hidden');
@@ -102,14 +106,18 @@ function render() {
         return;
     }
 
-    // Generate List
+    // Generate List, only for what's on the graph if it came from "See the songs"
+    let listData = filteredData;
+    if (appState.listFilter.length > 0) {
+        listData = filteredData.filter(song => appState.listFilter.some(pick => matchesPick(song, pick)));
+    }
     let sortedData = [];
     if (appState.listView === 'songs') {
-        sortedData = topSongs(filteredData);
+        sortedData = topSongs(listData);
     } else if (appState.listView === 'artists') {
-        sortedData = topArtists(filteredData);
+        sortedData = topArtists(listData);
     } else {
-        sortedData = topAlbums(filteredData);
+        sortedData = topAlbums(listData);
     }
 
     // Remember what's in the list so clicking a row knows what to put on the graph
@@ -186,6 +194,57 @@ function holdHeight(el, rebuild) {
     el.style.minHeight = '';
 }
 
+// Zooming in on the graph sets the date filter to whatever was clicked or dragged across.
+// Each zoom remembers where it was before, so Zoom out goes back one step at a time
+function zoomGraph(graph, from, to) {
+    if (graph.unit == 'hour') return; // Can't go smaller than a day with the date filter
+    const fromDate = msToDateInput(graph.buckets[from].start);
+    const toDate = msToDateInput(graph.buckets[to].end - 1);
+    if (appState.timeFilter == 'custom' && appState.customFrom == fromDate && appState.customTo == toDate) return;
+
+    appState.zoomStack.push({
+        timeFilter: appState.timeFilter,
+        monthFilter: appState.monthFilter,
+        customFrom: appState.customFrom,
+        customTo: appState.customTo
+    });
+    appState.timeFilter = 'custom';
+    appState.monthFilter = 'all';
+    appState.customFrom = fromDate;
+    appState.customTo = toDate;
+    applyFilterUI();
+    render();
+}
+
+function zoomOut() {
+    const previous = appState.zoomStack.pop();
+    if (!previous) return;
+    appState.timeFilter = previous.timeFilter;
+    appState.monthFilter = previous.monthFilter;
+    appState.customFrom = previous.customFrom;
+    appState.customTo = previous.customTo;
+    applyFilterUI();
+    render();
+}
+
+// Makes the date filter at the top show what's in appState, after zooming changes it
+function applyFilterUI() {
+    const isYear = appState.timeFilter != 'all' && appState.timeFilter != 'custom';
+    document.getElementById('time-range').value = appState.timeFilter;
+    document.getElementById('month-range').classList.toggle('hidden', !isYear);
+    document.getElementById('month-range').value = appState.monthFilter;
+    document.getElementById('custom-range').classList.toggle('hidden', appState.timeFilter != 'custom');
+    document.getElementById('custom-from').value = appState.customFrom;
+    document.getElementById('custom-to').value = appState.customTo;
+}
+
+// "See the songs": the Songs list for whatever the graph's showing, only for what's on it (if anything's picked)
+function seeGraphSongs() {
+    appState.listFilter = appState.graphSeries.map(pick => ({ type: pick.type, key: pick.key, label: pick.label }));
+    appState.listView = 'songs';
+    setView('list');
+}
+
 // Switches tab, same as clicking one of the tab buttons
 function setView(view) {
     document.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b.dataset.tab == view));
@@ -211,6 +270,7 @@ function setupEventListeners() {
 
     document.getElementById('time-range').addEventListener('change', (e) => {
         appState.timeFilter = e.target.value;
+        appState.zoomStack = [];
         const isYear = appState.timeFilter != 'all' && appState.timeFilter != 'custom';
 
         // Months only make sense with a year, and go back to all months when the year changes
@@ -238,18 +298,21 @@ function setupEventListeners() {
 
     document.getElementById('month-range').addEventListener('change', (e) => {
         appState.monthFilter = e.target.value;
+        appState.zoomStack = [];
         appState.shown = 50;
         render();
     });
 
     document.getElementById('custom-from').addEventListener('change', (e) => {
         appState.customFrom = e.target.value;
+        appState.zoomStack = [];
         appState.shown = 50;
         render();
     });
 
     document.getElementById('custom-to').addEventListener('change', (e) => {
         appState.customTo = e.target.value;
+        appState.zoomStack = [];
         appState.shown = 50;
         render();
     });
@@ -279,6 +342,13 @@ function setupEventListeners() {
             downloadShareImage();
         } else if (e.target.id == 'wrapped-share') {
             shareShareImage();
+        } else if (e.target.id == 'graph-zoom-out') {
+            zoomOut();
+        } else if (e.target.id == 'graph-see-songs') {
+            seeGraphSongs();
+        } else if (e.target.id == 'list-filter-clear') {
+            appState.listFilter = [];
+            render();
         } else if (e.target.id == 'graph-clear') {
             appState.graphSeries = [];
             render();
@@ -486,10 +556,20 @@ function listHeaderHTML() {
     for (const [value, text] of [['songs', 'Songs'], ['artists', 'Artists'], ['albums', 'Albums']]) {
         buttons += `<button type="button" class="sub-tab" data-list="${value}" aria-pressed="${appState.listView == value}">${text}</button>`;
     }
+    // Says when the list's only showing some things, with a way back to everything
+    let filter = '';
+    if (appState.listFilter.length > 0) {
+        const names = appState.listFilter.map(pick => `<strong>${escapeHTML(pick.label)}</strong>`).join(', ');
+        filter = `<div class="list-filter">
+                    <span>Only showing ${names}</span>
+                    <button id="list-filter-clear" type="button" class="secondary-btn">Show everything</button>
+                  </div>`;
+    }
     return `<div class="list-header">
                 <div class="sub-tabs" role="group" aria-label="Show">${buttons}</div>
                 <p class="list-hint">Click anything to see it on the graph.</p>
-            </div>`;
+            </div>
+            ${filter}`;
 }
 
 // 8. Custom Time Formatter
@@ -533,6 +613,13 @@ function graphControlsHTML() {
                 </div>
                 ${clear}
             </div>
+            <div class="graph-tools">
+                <p class="list-hint">Click a point or drag across the graph to zoom in.</p>
+                <div class="graph-tool-buttons">
+                    ${appState.zoomStack.length > 0 ? '<button id="graph-zoom-out" type="button" class="secondary-btn">Zoom out</button>' : ''}
+                    <button id="graph-see-songs" type="button" class="secondary-btn">See the songs</button>
+                </div>
+            </div>
             <div id="graph-area" class="graph-card"></div>`;
 }
 
@@ -560,7 +647,8 @@ function showGraph(data) {
             seriesInfo.push({ label: pick.label, type: typeNames[pick.type], colour: `var(--series-${pick.colour})`, removable: true });
         }
     }
-    drawGraph(area, buildGraphData(seriesRows, from, to), seriesInfo, appState.metric);
+    const graph = buildGraphData(seriesRows, from, to);
+    drawGraph(area, graph, seriesInfo, appState.metric, (start, end) => zoomGraph(graph, start, end));
 }
 
 // Uses the same lowercase keys as the lists, so this ignores capitals too
@@ -865,7 +953,8 @@ function erasHTML(result) {
     let html = `<h3 class="eras-title">Your eras</h3>
                 <p class="list-hint eras-hint">Your top artists year by year. Click a year to see its card.</p>
                 <div class="eras-grid">`;
-    for (const era of result.eras) {
+    // Most recent first
+    for (const era of result.eras.slice().reverse()) {
         const selected = appState.wrappedPeriod == era.label;
         html += `<section class="era-card${selected ? ' selected' : ''}">
                     <h3><button type="button" class="era-year" data-year="${era.label}">${escapeHTML(era.label)}</button>${era.partial ? ' <span class="era-partial">(partial)</span>' : ''}</h3>

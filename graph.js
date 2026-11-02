@@ -1,5 +1,5 @@
 // Everything for the graph tab lives in here so statsProcessor doesn't get massive
-import { sOnEnd } from './timeBits.js?v=5';
+import { sOnEnd } from './timeBits.js?v=6';
 
 const minPlayMs = 30000; // Same as the lists, so the numbers match up
 
@@ -61,6 +61,7 @@ export function buildGraphData(seriesRows, from, to) {
         const partial = start.getTime() < from || nextStart(start, unit).getTime() > to;
         buckets.push({
             start: start.getTime(),
+            end: nextStart(start, unit).getTime(),
             listens: seriesRows.map(() => 0),
             time: seriesRows.map(() => 0),
             partial: partial
@@ -142,8 +143,9 @@ function keyLine(colour) {
 // Draws the graph into container (which has to be on the page already, or its width is 0).
 // series is one { label, type, colour, removable } per line, in the same order as the data.
 // Removable ones get a × button with data-index, the click is handled in statsProcessor.
-// metric is 'plays' (listens) or 'time' (hours), from the toggle
-export function drawGraph(container, graph, series, metric) {
+// metric is 'plays' (listens) or 'time' (hours), from the toggle.
+// onZoom(from, to) gets called with bucket numbers when someone clicks a point (from == to) or drags across some
+export function drawGraph(container, graph, series, metric, onZoom) {
     container.innerHTML = '';
     const { unit, buckets } = graph;
     const single = series.length == 1;
@@ -231,7 +233,7 @@ export function drawGraph(container, graph, series, metric) {
 
     const names = series.map(s => s.label).join(', ');
     const svg = svgEl('svg', { width: width, height: height, class: 'graph-svg', tabindex: 0,
-        role: 'img', 'aria-label': `${title.textContent} for ${names}. Use the arrow keys to read values.` });
+        role: 'img', 'aria-label': `${title.textContent} for ${names}. Use the arrow keys to read values, and Enter to zoom in.` });
 
     // Gridlines and y labels. Counts up in whole steps so hours like 0.1 + 0.2 don't come out as 0.30000000000000004
     for (let n = 0; n * step <= yMax * 1.000001; n++) {
@@ -289,6 +291,10 @@ export function drawGraph(container, graph, series, metric) {
 
     const tooltip = document.createElement('div');
     tooltip.className = 'graph-tooltip hidden';
+
+    // The highlight while dragging across the graph to zoom in
+    const selection = svgEl('rect', { y: top, height: plotH, class: 'graph-selection', visibility: 'hidden' });
+    svg.appendChild(selection);
 
     // Hovering anywhere over the plot snaps to the nearest bucket
     const hitArea = svgEl('rect', { x: left, y: top, width: plotW, height: plotH, fill: 'transparent' });
@@ -350,19 +356,58 @@ export function drawGraph(container, graph, series, metric) {
         tooltip.classList.add('hidden');
     }
 
-    function showAtPointer(e) {
-        const x = e.clientX - svg.getBoundingClientRect().left;
+    const pointerX = e => e.clientX - svg.getBoundingClientRect().left;
+    const indexAt = x => {
         const i = buckets.length == 1 ? 0 : Math.round((x - left) / plotW * (buckets.length - 1));
-        show(Math.min(buckets.length - 1, Math.max(0, i)));
+        return Math.min(buckets.length - 1, Math.max(0, i));
+    };
+    function showAtPointer(e) {
+        show(indexAt(pointerX(e)));
     }
-    svg.addEventListener('pointermove', showAtPointer);
-    svg.addEventListener('pointerdown', showAtPointer); // Tapping on a phone
+
+    // Clicking a point zooms into it, dragging across some zooms into that stretch.
+    // Moving less than a few pixels counts as a click, so a slightly shaky click still works
+    let dragStart = null;
+    const half = buckets.length == 1 ? plotW / 2 : plotW / (buckets.length - 1) / 2;
+    svg.addEventListener('pointerdown', (e) => {
+        showAtPointer(e); // Tapping on a phone shows the tooltip
+        if (!onZoom) return;
+        dragStart = pointerX(e);
+        svg.setPointerCapture(e.pointerId); // Keep following the drag even if it leaves the graph
+    });
+    svg.addEventListener('pointermove', (e) => {
+        showAtPointer(e);
+        if (dragStart == null || Math.abs(pointerX(e) - dragStart) < 6) return;
+        const a = indexAt(dragStart), b = indexAt(pointerX(e));
+        const x1 = Math.max(left, xAt(Math.min(a, b)) - half);
+        const x2 = Math.min(left + plotW, xAt(Math.max(a, b)) + half);
+        selection.setAttribute('x', x1);
+        selection.setAttribute('width', x2 - x1);
+        selection.setAttribute('visibility', 'visible');
+    });
+    svg.addEventListener('pointerup', (e) => {
+        if (dragStart == null) return;
+        const a = indexAt(dragStart), b = indexAt(pointerX(e));
+        const moved = Math.abs(pointerX(e) - dragStart) >= 6;
+        dragStart = null;
+        selection.setAttribute('visibility', 'hidden');
+        onZoom(Math.min(a, b), moved ? Math.max(a, b) : Math.min(a, b));
+    });
+    svg.addEventListener('pointercancel', () => {
+        dragStart = null;
+        selection.setAttribute('visibility', 'hidden');
+    });
     svg.addEventListener('pointerleave', (e) => {
         // A tap "leaves" straight after, which would hide the tooltip before you can read it
         if (e.pointerType != 'touch') hide();
     });
     svg.addEventListener('blur', hide);
     svg.addEventListener('keydown', (e) => {
+        // Enter zooms into whichever point the arrow keys are on, same as clicking it
+        if (e.key == 'Enter' && current != -1 && onZoom) {
+            onZoom(current, current);
+            return;
+        }
         if (e.key != 'ArrowLeft' && e.key != 'ArrowRight') return;
         e.preventDefault();
         if (current == -1) {

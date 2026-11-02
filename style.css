@@ -1387,3 +1387,54 @@ dialog {
     background: #333;
     color: #f3f3f3;
 }
+
+/* --- GRAPH ZOOM AND LIST FILTER --- */
+
+.graph-svg {
+    cursor: zoom-in;
+    touch-action: pan-y; /* Sideways drags select a stretch to zoom into, up and down still scrolls */
+}
+
+.graph-selection {
+    fill: #1db954;
+    fill-opacity: 0.18;
+}
+
+.graph-tools {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    align-items: center;
+    gap: 0.5rem;
+    margin-bottom: 0.75rem;
+}
+
+.graph-tools .list-hint {
+    margin: 0;
+}
+
+.graph-tool-buttons {
+    display: flex;
+    gap: 0.5rem;
+}
+
+.graph-tool-buttons button, .list-filter button {
+    margin: 0;
+    padding: 0.4rem 0.9rem;
+    font-size: 0.85rem;
+}
+
+.list-filter {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    align-items: center;
+    gap: 0.5rem;
+    background: #282828;
+    border: 1px solid #1db954;
+    border-radius: 8px;
+    padding: 0.6rem 0.9rem;
+    margin-bottom: 0.75rem;
+    color: #e0e0e0;
+    font-size: 0.9rem;
+}
