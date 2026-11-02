@@ -5,7 +5,7 @@ import { buildGraphData, drawGraph } from './graph.js?v=2';
 let appState = {
     allData: [],
     currentView: 'songs',
-    metric: 'plays', // 'plays' or 'time', what the lists are sorted by and what the graph shows
+    metric: 'time', // 'plays' or 'time', what the lists are sorted by and what the graph shows
     timeFilter: 'all', // 'all', a year like '2026', or 'custom'
     monthFilter: 'all', // 'all' or 0-11, only used when a year is picked
     customFrom: '', // "YYYY-MM-DD" from the date inputs
