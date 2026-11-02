@@ -1022,6 +1022,10 @@ dialog h3 {
     border-radius: 0;
     text-align: left;
     cursor: pointer;
+    /* Holding a name on an iPhone opens its menu, same as the list rows */
+    -webkit-touch-callout: none;
+    -webkit-user-select: none;
+    user-select: none;
 }
 
 .fun-pick:hover {

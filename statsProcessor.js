@@ -1,6 +1,6 @@
-import { sOnEnd } from './timeBits.js?v=13';
-import { buildGraphData, drawGraph } from './graph.js?v=13';
-import { drawCard, themes, findAlbumCover } from './share.js?v=13';
+import { sOnEnd } from './timeBits.js?v=14';
+import { buildGraphData, drawGraph } from './graph.js?v=14';
+import { drawCard, themes, findAlbumCover } from './share.js?v=14';
 
 // 1. The Global State
 let appState = {
@@ -311,11 +311,11 @@ function resetZoom() {
     render();
 }
 
-// Right-clicking a row in the lists: View in graph, View on Spotify, or Exclude.
+// Right-clicking a row in the lists (or a name on the Fun tab): View in graph, View on Spotify, or Exclude.
 // Opened by right-click, the menu key on a keyboard, or a long press on a phone
-let menuIndex = -1;
-function openRowMenu(index, x, y) {
-    menuIndex = index;
+let menuTarget = null;
+function openRowMenu(target, x, y) {
+    menuTarget = target;
     const menu = document.getElementById('row-menu');
     // Android can fire its own long press as well as ours, and showing it twice throws
     if (!menu.matches(':popover-open')) menu.showPopover();
@@ -327,16 +327,24 @@ function openRowMenu(index, x, y) {
     menu.querySelector('button').focus();
 }
 
+// What a right-click or long press landed on, as { type, key }: a row in the lists, or a name on the Fun tab
+function menuTargetAt(el) {
+    const row = el.closest('.list-item');
+    if (row) return { type: appState.listType, key: appState.listKeys[Number(row.dataset.index)], el: row };
+    const name = el.closest('.fun-pick');
+    if (name) return { type: name.dataset.type, key: name.dataset.key, el: name };
+    return null;
+}
+
 function rowMenuAction(action) {
     document.getElementById('row-menu').hidePopover();
-    const type = appState.listType;
-    const key = appState.listKeys[menuIndex];
-    if (key == null) return;
+    if (!menuTarget || menuTarget.key == null) return;
+    const { type, key } = menuTarget;
     const name = appState.names[type][key];
     const label = type == 'artist' ? name.name : `${name.name} - ${name.artist}`;
 
     if (action == 'graph') {
-        graphFromList(menuIndex);
+        graphPick(type, key);
     } else if (action == 'spotify') {
         // Spotify's search finds it from the name and artist, e.g. "Animal Badflower"
         const search = type == 'artist' ? name.name : `${name.name} ${name.artist}`;
@@ -437,8 +445,7 @@ function setupEventListeners() {
         } else if (e.target.closest('.fun-pick')) {
             // A name on the Fun tab, onto the graph like clicking it in the lists
             const pick = e.target.closest('.fun-pick').dataset;
-            addPickByKey(pick.type, pick.key, pick.label);
-            setView('graph');
+            graphPick(pick.type, pick.key);
         } else if (e.target.closest('.list-item')) {
             graphFromList(Number(e.target.closest('.list-item').dataset.index));
         } else if (e.target.closest('.year-chip')) {
@@ -463,7 +470,6 @@ function setupEventListeners() {
         }
     });
 
-    // Right-click (or the menu key, or a long press on Android) on a list row opens its menu
     // The custom year range on the Wrapped tab. Picking a start after the end (or the other way round)
     // moves the other one with it, so it's never back to front
     viewport.addEventListener('change', (e) => {
@@ -480,22 +486,22 @@ function setupEventListeners() {
         document.getElementById(e.target.id).focus(); // The tab's rebuilt, so put focus back where it was
     });
 
+    // Right-click (or the menu key, or a long press on Android) on a list row or Fun tab name opens its menu
     viewport.addEventListener('contextmenu', (e) => {
-        const row = e.target.closest('.list-item');
-        if (!row) return;
+        const target = menuTargetAt(e.target);
+        if (!target) return;
         e.preventDefault();
         // From the keyboard there's no mouse position, so put it by the row instead
-        const box = row.getBoundingClientRect();
+        const box = target.el.getBoundingClientRect();
         const x = e.clientX || box.left + 40;
         const y = e.clientY || box.bottom;
         press = null; // Android's long press got there first
-        const index = Number(row.dataset.index);
         // On Linux and Macs this comes when the button goes down, and letting go of it then counts as
         // a click outside the menu, which closes it straight away. So open it once the button's let go
         if (e.buttons & 2) {
-            window.addEventListener('pointerup', () => setTimeout(() => openRowMenu(index, x, y), 0), { once: true });
+            window.addEventListener('pointerup', () => setTimeout(() => openRowMenu(target, x, y), 0), { once: true });
         } else {
-            openRowMenu(index, x, y);
+            openRowMenu(target, x, y);
         }
     });
 
@@ -506,9 +512,9 @@ function setupEventListeners() {
     let swallowClick = false;
     viewport.addEventListener('pointerdown', (e) => {
         swallowClick = false;
-        const row = e.target.closest('.list-item');
-        if (e.pointerType != 'touch' || !row) return;
-        press = { index: Number(row.dataset.index), x: e.clientX, y: e.clientY, held: false };
+        const target = menuTargetAt(e.target);
+        if (e.pointerType != 'touch' || !target) return;
+        press = { target: target, x: e.clientX, y: e.clientY, held: false };
         const thisPress = press;
         setTimeout(() => thisPress.held = true, 500);
     });
@@ -519,9 +525,9 @@ function setupEventListeners() {
     viewport.addEventListener('pointercancel', () => press = null);
     viewport.addEventListener('pointerup', () => {
         if (press && press.held) {
-            const { index, x, y } = press;
+            const { target, x, y } = press;
             swallowClick = true;
-            setTimeout(() => openRowMenu(index, x, y), 0);
+            setTimeout(() => openRowMenu(target, x, y), 0);
         }
         press = null;
     });
@@ -926,10 +932,13 @@ function pickSuggestion(index) {
     searchBoxes[appState.suggestBox].pick(item);
 }
 
-// From clicking a row in one of the lists. Adds it to whatever's already on the graph and switches to it
+// From clicking a row in one of the lists
 function graphFromList(index) {
-    const type = appState.listType;
-    const key = appState.listKeys[index];
+    graphPick(appState.listType, appState.listKeys[index]);
+}
+
+// Adds an artist, album or song to whatever's already on the graph and switches to it
+function graphPick(type, key) {
     const name = appState.names[type][key];
     const label = type == 'artist' ? name.name : `${name.name} - ${name.artist}`;
     addPickByKey(type, key, label);
@@ -1526,7 +1535,8 @@ function funHTML(periodRows) {
         firstSongCard(rows)
     ].filter(card => card);
 
-    return `<p class="list-hint">Odd little things about your listening${picked ? ' in this period' : ''}. Click a name to see it on the graph.</p>
+    const more = touchScreen ? 'tap and hold for more' : 'right-click for more';
+    return `<p class="list-hint">Odd little things about your listening${picked ? ' in this period' : ''}. ${touchScreen ? 'Tap' : 'Click'} a name to see it on the graph, or ${more}.</p>
             <div class="fun-grid">${cards.join('')}</div>`;
 }
 
@@ -1540,7 +1550,7 @@ function funCard(title, big, detail, items = []) {
             const names = appState.names[item.type][item.key];
             const label = item.type == 'artist' ? names.name : `${names.name} - ${names.artist}`;
             const artist = item.type == 'artist' ? '' : `<span class="fun-artist">${escapeHTML(names.artist)}</span>`;
-            name = `<button type="button" class="fun-pick" data-type="${item.type}" data-key="${escapeHTML(item.key)}" data-label="${escapeHTML(label)}">${escapeHTML(names.name)}</button>${artist}`;
+            name = `<button type="button" class="fun-pick" data-type="${item.type}" data-key="${escapeHTML(item.key)}" title="Show ${escapeHTML(label)} on the graph">${escapeHTML(names.name)}</button>${artist}`;
         } else {
             name = `<span>${escapeHTML(item.text)}</span>`;
         }
