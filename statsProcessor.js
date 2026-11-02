@@ -20,6 +20,7 @@ let appState = {
     suggestions: [], // What's showing under a search box at the moment, which box, and which one the arrow keys are on
     suggestBox: 'graph-search',
     activeSuggestion: -1,
+    eras: null, // The eras on screen, kept for making the share image
     excluded: [], // Anything left out of the stats, each { type, key, label }. Remembered between visits
     excludedKeys: { artist: {}, album: {}, song: {} },
     listType: 'song', // What's in the list on screen, and the keys in order, for clicking a row
@@ -44,6 +45,7 @@ export function calculateStats(songs) {
     for (const song of songs) {
         const date = new Date(song.ts);
         song.localYear = String(date.getFullYear());
+        song.localMonth = date.getMonth();
         song.playedAt = date.getTime();
     }
     appState.allData = songs;
@@ -69,6 +71,12 @@ function render() {
     
     // Update Header Stats
     updateBentoStats(filteredData);
+
+    if (appState.currentView === 'eras') {
+        appState.eras = buildEras(filteredData);
+        viewport.innerHTML = erasHTML(appState.eras);
+        return;
+    }
 
     if (appState.currentView === 'graph') {
         holdHeight(viewport, () => {
@@ -709,7 +717,74 @@ function suggestionKeys(e) {
     }
 }
 
-// 11. Excluding things from the stats
+// 11. Eras
+// Your top artists for each year, or each month if you're looking at about a year or less
+function buildEras(data) {
+    const bounds = getTimeBounds();
+    const from = Math.max(bounds.from == null ? -Infinity : bounds.from, appState.firstPlay);
+    const to = Math.min(bounds.to == null ? Infinity : bounds.to, appState.lastPlay + 1);
+    const byMonth = to - from <= 400 * 1000*60*60*24;
+
+    // Sort the plays into years (or months). Keys like "2026" or "2026-03" sort in date order
+    const groups = {};
+    for (const song of data) {
+        if (!song.master_metadata_track_name) continue;
+        const key = byMonth ? `${song.localYear}-${String(song.localMonth).padStart(2, '0')}` : song.localYear;
+        if (!groups[key]) groups[key] = [];
+        groups[key].push(song);
+    }
+
+    let eras = [];
+    for (const key of Object.keys(groups).sort()) {
+        const top = topArtists(groups[key]).slice(0, 5);
+        if (top.length == 0) continue; // Nothing but podcasts that month, so skip it
+        const year = Number(key.slice(0, 4));
+        const month = byMonth ? Number(key.slice(5)) : 0;
+        const start = new Date(year, month, 1);
+        const end = byMonth ? new Date(year, month + 1, 1) : new Date(year + 1, 0, 1);
+        eras.push({
+            label: byMonth ? start.toLocaleDateString(undefined, { month: 'long', year: 'numeric' }) : String(year),
+            shortLabel: byMonth ? start.toLocaleDateString(undefined, { month: 'short' }) : String(year),
+            top: top,
+            partial: start.getTime() < from || end.getTime() > to // Only some of it's in the range, like this year so far
+        });
+    }
+    return { unit: byMonth ? 'month' : 'year', eras: eras, from: from, to: to };
+}
+
+function eraValue(stats) {
+    if (appState.metric == 'time') {
+        const hours = Math.round(stats.time / (1000*60*60));
+        return `${hours.toLocaleString()} hr${sOnEnd(hours)}`;
+    }
+    return `${stats.count.toLocaleString()} play${sOnEnd(stats.count)}`;
+}
+
+function erasHTML(result) {
+    if (result.eras.length == 0) return `<p>No data found for this period.</p>`;
+
+    let html = `<div class="eras-header">
+                    <p class="list-hint">Your top artists ${result.unit == 'month' ? 'month by month' : 'year by year'}.</p>
+                    <button id="share-btn" type="button">Make a shareable image</button>
+                </div>
+                <div class="eras-grid">`;
+    for (const era of result.eras) {
+        html += `<section class="era-card">
+                    <h3>${escapeHTML(era.label)}${era.partial ? ' <span class="era-partial">(partial)</span>' : ''}</h3>
+                    <ol>`;
+        for (let i = 0; i < era.top.length; i++) {
+            const stats = era.top[i][1];
+            html += `<li${i == 0 ? ' class="era-top"' : ''}>
+                        <span class="era-name">${escapeHTML(stats.name)}</span>
+                        <span class="era-value">${eraValue(stats)}</span>
+                     </li>`;
+        }
+        html += `</ol></section>`;
+    }
+    return html + `</div>`;
+}
+
+// 12. Excluding things from the stats
 // Anything excluded gets taken out of the data everything else works from, so all the numbers agree
 const excludedStorageKey = 'unwrapper-excluded';
 
