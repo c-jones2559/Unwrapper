@@ -305,7 +305,7 @@ function generateListHTML(sortedData) {
         html += `<li>
                     ${headerContent}<br>
                     <span style="color: #b3b3b3; font-size: 0.9em;">
-                        ${count.toLocaleString()} plays &bull; <em>${timeString}</em>
+                        ${count.toLocaleString()} play${sOnEnd(count)} &bull; <em>${timeString}</em>
                     </span>
                  </li>`;
     }
@@ -323,7 +323,9 @@ function formatHoursAndMinutes(ms) {
     const hours = Math.floor(minutes / 60);
     const remainingMinutes = minutes % 60;
 
-    return `${hours} hour${sOnEnd(hours)}, ${remainingMinutes} minute${sOnEnd(remainingMinutes)}`;
+    // No point saying "0 hours" for a song you've played twice
+    if (hours == 0) return `${remainingMinutes} minute${sOnEnd(remainingMinutes)}`;
+    return `${hours.toLocaleString()} hour${sOnEnd(hours)}, ${remainingMinutes} minute${sOnEnd(remainingMinutes)}`;
 }
 
 // 9. Stops a song called "<b>hi</b>" turning into actual HTML

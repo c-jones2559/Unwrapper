@@ -149,11 +149,17 @@ a:hover {
     box-sizing: border-box; /* Important so padding doesn't break layout */
 }
 
+.tabs {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+}
+
 .tab-btn {
     background: transparent;
     border: 1px solid #1db954;
     padding: 0.5rem 1rem;
-    margin-right: 0.5rem;
+    margin: 0; /* The normal button style has a big bottom margin, which pushed the tabs up out of line */
     font-size: 0.9rem;
     color: #f3f3f3;
     cursor: pointer;
@@ -429,4 +435,33 @@ a:hover {
 #show-more-btn {
     display: block;
     margin: -1rem auto 2rem auto; /* Tuck it under the list */
+}
+
+/* --- PHONES --- */
+
+@media (max-width: 600px) {
+    /* Stack the stat cards instead of squashing three of them side by side */
+    #bento-grid {
+        grid-template-columns: 1fr 1fr;
+        grid-template-rows: auto auto;
+    }
+
+    .big-card {
+        grid-row: auto;
+        grid-column: 1 / span 2;
+        font-size: 1.5rem;
+        padding: 1rem;
+    }
+
+    .big-card h3 {
+        margin: 0;
+    }
+
+    .card {
+        padding: 1rem;
+    }
+
+    .stats-list {
+        padding: 1rem 1rem 1rem 2.5rem;
+    }
 }
