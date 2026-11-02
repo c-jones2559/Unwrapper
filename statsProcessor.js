@@ -1,7 +1,7 @@
-import { sOnEnd } from './timeBits.js?v=8129e47c';
-import { buildGraphData, drawGraph } from './graph.js?v=8129e47c';
-import { drawCard, themes, findAlbumCover } from './share.js?v=8129e47c';
-import { minPlayMs, capNavidromePlays, nameKey, buildNameKeys } from './plays.js?v=8129e47c';
+import { sOnEnd } from './timeBits.js?v=299635bb';
+import { buildGraphData, drawGraph } from './graph.js?v=299635bb';
+import { drawCard, themes, findAlbumCover } from './share.js?v=299635bb';
+import { minPlayMs, capNavidromePlays, nameKey, buildNameKeys } from './plays.js?v=299635bb';
 
 // 1. The Global State
 let appState = {
@@ -168,6 +168,15 @@ function render() {
     if (appState.graphSeries.length > 0) {
         listData = filteredData.filter(song => appState.graphSeries.some(pick => matchesPick(song, pick)));
     }
+    // The log: every play, newest first. Each entry's song is what clicking or right-clicking it acts on
+    if (appState.listView === 'log') {
+        const plays = logPlays();
+        appState.listType = 'song';
+        appState.listKeys = plays.slice(0, appState.shown).map(song => song.songKey);
+        viewport.innerHTML = listHeaderHTML() + logHTML(plays);
+        return;
+    }
+
     let sortedData = [];
     if (appState.listView === 'songs') {
         sortedData = listData === filteredData ? top.songs : topSongs(listData);
@@ -745,7 +754,7 @@ function generateListHTML(sortedData) {
 // The Songs / Artists / Albums switch above the list
 function listHeaderHTML() {
     let buttons = '';
-    for (const [value, text] of [['songs', 'Songs'], ['artists', 'Artists'], ['albums', 'Albums']]) {
+    for (const [value, text] of [['songs', 'Songs'], ['artists', 'Artists'], ['albums', 'Albums'], ['log', 'Log']]) {
         buttons += `<button type="button" class="sub-tab" data-list="${value}" aria-pressed="${appState.listView == value}">${text}</button>`;
     }
     // Filters: the same ones as the graph (adding one here puts it on the graph too, and the other way round),
@@ -776,6 +785,53 @@ function listHeaderHTML() {
                 ${appState.graphSeries.length > 0 ? '<button id="list-filter-clear" type="button" class="secondary-btn">Clear all</button>' : ''}
             </div>
             ${chips ? `<ul class="graph-legend list-chips">${chips}</ul>` : ''}`;
+}
+
+// The log's plays: music in the date filter (and any artist/album/song filters), newest first.
+// Sorting years of plays takes a moment, so they're sorted once and kept until the data changes
+let logOrder = null;
+function logPlays() {
+    if (!logOrder || logOrder.data !== appState.data) {
+        const music = appState.data.filter(song => song.master_metadata_track_name);
+        logOrder = { data: appState.data, plays: music.sort((a, b) => b.playedAt - a.playedAt) };
+    }
+    const bounds = getTimeBounds();
+    const picks = appState.graphSeries;
+    return logOrder.plays.filter(song =>
+        (bounds.from == null || song.playedAt >= bounds.from) &&
+        (bounds.to == null || song.playedAt < bounds.to) &&
+        (picks.length == 0 || picks.some(pick => matchesPick(song, pick))));
+}
+
+// Each play with its time, song, artist and how long it played, under a heading for each day.
+// Ones under 30 seconds are dimmed, since they don't count as plays anywhere else
+function logHTML(plays) {
+    if (plays.length == 0) return `<p>No plays in this period.</p>`;
+    let html = `<p class="list-hint log-count">${plays.length.toLocaleString()} play${sOnEnd(plays.length)}, newest first</p>
+                <ol class="stats-list log-list">`;
+    let lastDay = null;
+    for (let i = 0; i < appState.shown && i < plays.length; i++) {
+        const song = plays[i];
+        const when = new Date(song.playedAt);
+        if (song.day !== lastDay) {
+            html += `<li class="log-day">${when.toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}</li>`;
+            lastDay = song.day;
+        }
+        const names = appState.names.song[song.songKey];
+        const short = song.ms_played < minPlayMs;
+        const seconds = Math.round(song.ms_played / 1000);
+        const length = `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`;
+        html += `<li class="log-entry${short ? ' log-short' : ''}">
+                    <button class="list-item log-item" data-index="${i}" title="${short ? "Under 30 seconds, so it doesn't count as a play" : 'Show on the graph'}">
+                        <span class="log-time">${when.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })}</span>
+                        <span class="log-song"><strong>${escapeHTML(names.name)}</strong> <span class="log-artist">${escapeHTML(names.artist)}</span></span>
+                        <span class="log-length">${length}</span>
+                    </button>
+                 </li>`;
+    }
+    html += `</ol>`;
+    if (plays.length > appState.shown) html += `<button id="show-more-btn">Show more</button>`;
+    return html;
 }
 
 // 8. Custom Time Formatter

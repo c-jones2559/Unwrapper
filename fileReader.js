@@ -1,5 +1,5 @@
-import { calculateStats, clearStats, announce, autoStartGenres } from './statsProcessor.js?v=8129e47c';
-import { fromAccountData, removeDuplicates } from './plays.js?v=8129e47c';
+import { calculateStats, clearStats, announce, autoStartGenres } from './statsProcessor.js?v=299635bb';
+import { fromAccountData, removeDuplicates } from './plays.js?v=299635bb';
 
 // 1. Helper function to promise-ify the FileReader (makes life way easier)
 const readJsonFile = (file) => {

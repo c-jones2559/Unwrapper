@@ -301,6 +301,74 @@ a:hover {
     margin: 0 auto;
 }
 
+/* --- LOG --- */
+
+.log-count {
+    margin-bottom: 0.5rem;
+}
+
+/* No numbers down the side, and a bit tighter than the other lists since there's so many */
+.log-list {
+    list-style: none;
+    padding: 1rem 2rem;
+}
+
+.stats-list .log-day {
+    padding: 1.2rem 0 0.4rem 0;
+    border-bottom: 1px solid #444;
+    color: #1db954;
+    font-weight: bold;
+    font-size: 0.95rem;
+}
+
+.stats-list .log-day:first-child {
+    padding-top: 0;
+}
+
+.stats-list .log-entry {
+    padding: 0.45rem 0;
+}
+
+/* Time, then the song and artist, then how long it played on the right.
+   Both classes, so it wins over the plain list row style further down */
+.list-item.log-item {
+    display: flex;
+    align-items: baseline;
+    gap: 1rem;
+}
+
+.log-time, .log-length {
+    flex-shrink: 0;
+    color: #999;
+    font-size: 0.85rem;
+    font-variant-numeric: tabular-nums;
+}
+
+.log-song {
+    flex: 1;
+    min-width: 0;
+    overflow-wrap: anywhere;
+}
+
+.log-artist {
+    color: #999;
+}
+
+/* Under 30 seconds, so not counted as a play */
+.log-short .log-song {
+    opacity: 0.55;
+}
+
+@media (max-width: 600px) {
+    .log-list {
+        padding: 0.75rem 1rem;
+    }
+
+    .list-item.log-item {
+        gap: 0.6rem;
+    }
+}
+
 /* --- GRAPH --- */
 
 .graph-controls {

@@ -16,7 +16,7 @@ The video and podcast files are fine to include too, they just get left out of t
 
 ## What you can do with it
 
-- See your top songs, artists and albums for all time, a year, a month, or any dates you pick.
+- See your top songs, artists and albums for all time, a year, a month, or any dates you pick, or the Log: every play, newest first.
 - Sort by how many times you played something, or by how long you actually spent listening to it (in the settings, behind the gear).
 - Graph your listening over time. Click anything in the lists, or search for it, to put it on the graph, and compare up to eight artists, albums or songs at once. Click a month or drag across a stretch to zoom in (right-click to zoom back out). The lists follow the same dates, and you can filter both by artist, album or song from either one, so you can see exactly what you were playing.
 - Right-click (or tap and hold on a phone) anything in the lists or on the Fun tab to see it on the graph, find it on Spotify, or exclude it.
