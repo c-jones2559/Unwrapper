@@ -47,9 +47,29 @@
         <div class="filters">
             <select id="time-range">
                 <option value="all">All Time</option>
-                <option value="2025">2025</option>
-                <option value="2024">2024</option>
-                </select>
+            </select>
+            <!-- Only shows once a year is picked -->
+            <select id="month-range" class="hidden">
+                <option value="all">All months</option>
+                <option value="0">January</option>
+                <option value="1">February</option>
+                <option value="2">March</option>
+                <option value="3">April</option>
+                <option value="4">May</option>
+                <option value="5">June</option>
+                <option value="6">July</option>
+                <option value="7">August</option>
+                <option value="8">September</option>
+                <option value="9">October</option>
+                <option value="10">November</option>
+                <option value="11">December</option>
+            </select>
+            <!-- Only shows for Custom range -->
+            <span id="custom-range" class="hidden">
+                <input type="date" id="custom-from" aria-label="From">
+                to
+                <input type="date" id="custom-to" aria-label="To">
+            </span>
         </div>
     </nav>
 

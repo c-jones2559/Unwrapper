@@ -137,6 +137,8 @@ a:hover {
     padding: 1rem;
     border-radius: 8px;
     display: flex;
+    flex-wrap: wrap; /* More filters now, so let them drop to a new line on phones */
+    gap: 0.75rem;
     justify-content: space-between;
     align-items: center;
     max-width: 800px;
@@ -164,7 +166,15 @@ a:hover {
     color: white;
 }
 
-#time-range {
+.filters {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.5rem;
+    color: #b3b3b3;
+}
+
+#time-range, #month-range, #custom-range input {
     padding: 0.5rem;
     background: #282828;
     color: #f3f3f3;

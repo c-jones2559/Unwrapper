@@ -4,7 +4,10 @@ import { msToHours, sOnEnd } from './timeBits.js';
 let appState = {
     allData: [],
     currentView: 'songs',
-    timeFilter: 'all',
+    timeFilter: 'all', // 'all', a year like '2026', or 'custom'
+    monthFilter: 'all', // 'all' or 0-11, only used when a year is picked
+    customFrom: '', // "YYYY-MM-DD" from the date inputs
+    customTo: '',
     shown: 50 // How many rows of the list to show, goes up by 50 with each Show more
 };
 
@@ -14,7 +17,9 @@ export function calculateStats(songs) {
 
     // ts is in UTC, so work out the local year once here rather than on every filter change
     for (const song of songs) {
-        song.localYear = String(new Date(song.ts).getFullYear());
+        const date = new Date(song.ts);
+        song.localYear = String(date.getFullYear());
+        song.playedAt = date.getTime();
     }
     appState.allData = songs;
 
@@ -31,7 +36,7 @@ function render() {
     const viewport = document.getElementById('content-viewport');
     
     // Filter data
-    const filteredData = filterDataByTime(appState.allData, appState.timeFilter);
+    const filteredData = filterDataByTime(appState.allData);
     
     // Update Header Stats
     updateBentoStats(filteredData);
@@ -55,9 +60,49 @@ function render() {
 }
 
 // 4. Helper to Filter Data
-function filterDataByTime(data, year) {
-    if (year === 'all') return data;
-    return data.filter(item => item.localYear == year);
+function filterDataByTime(data) {
+    const bounds = getTimeBounds();
+    if (bounds.from == null && bounds.to == null) return data;
+    return data.filter(item =>
+        (bounds.from == null || item.playedAt >= bounds.from) &&
+        (bounds.to == null || item.playedAt < bounds.to)
+    );
+}
+
+// Start and end of whatever time is picked, in local time. null means no limit that side
+function getTimeBounds() {
+    const year = appState.timeFilter;
+    if (year == 'all') {
+        return { from: null, to: null };
+    }
+    if (year == 'custom') {
+        return { from: dateInputToMs(appState.customFrom), to: dateInputToMs(appState.customTo, true) };
+    }
+
+    const y = Number(year);
+    if (appState.monthFilter == 'all') {
+        return { from: new Date(y, 0, 1).getTime(), to: new Date(y + 1, 0, 1).getTime() };
+    }
+    const m = Number(appState.monthFilter);
+    return { from: new Date(y, m, 1).getTime(), to: new Date(y, m + 1, 1).getTime() };
+}
+
+// Date inputs give "2026-03-29", but new Date() reads that as UTC, so build it in local time instead
+function dateInputToMs(value, endOfDay) {
+    if (!value) return null;
+    const [y, m, d] = value.split('-').map(Number);
+    if (endOfDay) {
+        return new Date(y, m - 1, d + 1).getTime(); // Start of the next day, so the end date counts
+    }
+    return new Date(y, m - 1, d).getTime();
+}
+
+// And the other way, for filling the date inputs in
+function msToDateInput(ms) {
+    const date = new Date(ms);
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${date.getFullYear()}-${month}-${day}`;
 }
 
 // 5. Helper to Update Header
@@ -91,6 +136,33 @@ function setupEventListeners() {
 
     document.getElementById('time-range').addEventListener('change', (e) => {
         appState.timeFilter = e.target.value;
+        const isYear = appState.timeFilter != 'all' && appState.timeFilter != 'custom';
+
+        // Months only make sense with a year, and go back to all months when the year changes
+        document.getElementById('month-range').classList.toggle('hidden', !isYear);
+        document.getElementById('month-range').value = 'all';
+        appState.monthFilter = 'all';
+
+        document.getElementById('custom-range').classList.toggle('hidden', appState.timeFilter != 'custom');
+
+        appState.shown = 50;
+        render();
+    });
+
+    document.getElementById('month-range').addEventListener('change', (e) => {
+        appState.monthFilter = e.target.value;
+        appState.shown = 50;
+        render();
+    });
+
+    document.getElementById('custom-from').addEventListener('change', (e) => {
+        appState.customFrom = e.target.value;
+        appState.shown = 50;
+        render();
+    });
+
+    document.getElementById('custom-to').addEventListener('change', (e) => {
+        appState.customTo = e.target.value;
         appState.shown = 50;
         render();
     });
@@ -119,6 +191,29 @@ function setupYearOptions(data) {
         option.innerText = year;
         select.appendChild(option);
     });
+
+    const custom = document.createElement('option');
+    custom.value = 'custom';
+    custom.innerText = 'Custom range';
+    select.appendChild(custom);
+
+    // Start the custom range off as first play to last play
+    let first = Infinity, last = -Infinity;
+    for (const item of data) {
+        if (item.playedAt < first) first = item.playedAt;
+        if (item.playedAt > last) last = item.playedAt;
+    }
+    if (data.length > 0) {
+        appState.customFrom = msToDateInput(first);
+        appState.customTo = msToDateInput(last);
+        for (const id of ['custom-from', 'custom-to']) {
+            const input = document.getElementById(id);
+            input.min = appState.customFrom;
+            input.max = appState.customTo;
+        }
+        document.getElementById('custom-from').value = appState.customFrom;
+        document.getElementById('custom-to').value = appState.customTo;
+    }
 }
 
 // 7. Updated HTML Generator (Now includes Artist logic)
