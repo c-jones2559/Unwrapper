@@ -3,8 +3,9 @@ import { msToHours, sOnEnd } from './timeBits.js';
 // 1. The Global State
 let appState = {
     allData: [],
-    currentView: 'songs', 
-    timeFilter: 'all' 
+    currentView: 'songs',
+    timeFilter: 'all',
+    shown: 50 // How many rows of the list to show, goes up by 50 with each Show more
 };
 
 // 2. The Initializer
@@ -83,13 +84,23 @@ function setupEventListeners() {
             document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
             e.target.classList.add('active');
             appState.currentView = e.target.dataset.tab;
+            appState.shown = 50;
             render();
         });
     });
 
     document.getElementById('time-range').addEventListener('change', (e) => {
         appState.timeFilter = e.target.value;
+        appState.shown = 50;
         render();
+    });
+
+    // The button gets rebuilt every render, so listen on the viewport instead of the button itself
+    document.getElementById('content-viewport').addEventListener('click', (e) => {
+        if (e.target.id == 'show-more-btn') {
+            appState.shown += 50;
+            render();
+        }
     });
 }
 
@@ -116,7 +127,7 @@ function generateListHTML(sortedData) {
     
     let html = `<ol class="stats-list">`;
     
-    for (let i = 0; i < 50 && i < sortedData.length; i++) {
+    for (let i = 0; i < appState.shown && i < sortedData.length; i++) {
         const stats = sortedData[i][1];
         const name = escapeHTML(stats.name);
         const count = stats.count;
@@ -140,6 +151,10 @@ function generateListHTML(sortedData) {
                  </li>`;
     }
     html += `</ol>`;
+
+    if (sortedData.length > appState.shown) {
+        html += `<button id="show-more-btn">Show more</button>`;
+    }
     return html;
 }
 
