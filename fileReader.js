@@ -1,4 +1,4 @@
-import { calculateStats } from './statsProcessor.js?v=2';
+import { calculateStats } from './statsProcessor.js?v=3';
 
 // 1. Helper function to promise-ify the FileReader (makes life way easier)
 const readJsonFile = (file) => {
@@ -26,15 +26,25 @@ const readJsonFile = (file) => {
 // 2. The Event Listener
 document.getElementById('processBtn').addEventListener('click', async () => {
     const inputElement = document.getElementById('input');
+    const button = document.getElementById('processBtn');
 
     if (!inputElement.files.length) {
         alert("Hold on, you haven't selected any files yet!");
         return;
     }
 
+    // Show it's doing something, years of data can take a few seconds.
+    // Disabled too so it can't get clicked again halfway through
+    button.disabled = true;
+    button.innerHTML = `<span class="spinner" aria-hidden="true"></span>Processing...`;
+
     try {
         const promises = Array.from(inputElement.files).map(readJsonFile);
         const combinedData = await Promise.all(promises);
+
+        // The rest is one long go with no breaks, and the page can't redraw until it's finished,
+        // so wait a frame first to make sure the spinner's actually on screen
+        await new Promise(resolve => requestAnimationFrame(() => setTimeout(resolve, 0)));
 
         let songs = [];
         for (const file of combinedData) {
@@ -50,6 +60,12 @@ document.getElementById('processBtn').addEventListener('click', async () => {
 
     } catch (error) {
         console.error("Error: ", error);
+        // Say what went wrong on the page as well, otherwise the spinner just stops and nothing happens
+        document.getElementById("content-viewport").textContent =
+            typeof error == "string" ? error : "Something went wrong reading those files.";
+    } finally {
+        button.disabled = false;
+        button.textContent = "Process";
     }
 });
 

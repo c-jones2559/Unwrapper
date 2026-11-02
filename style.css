@@ -80,6 +80,37 @@ button:hover {
     background: #169943;
 }
 
+/* While Process is working */
+#processBtn:disabled {
+    cursor: progress;
+    background: #169943;
+}
+
+/* Spins with transform, which browsers animate separately from JavaScript,
+   so it keeps going while the data's being crunched */
+.spinner {
+    display: inline-block;
+    width: 1em;
+    height: 1em;
+    margin-right: 0.5em;
+    vertical-align: -0.15em;
+    border: 2px solid rgba(255, 255, 255, 0.35);
+    border-top-color: #fff;
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+    to { transform: rotate(360deg); }
+}
+
+/* Slower for anyone who's asked their device for less motion, but still moving so it's clearly busy */
+@media (prefers-reduced-motion: reduce) {
+    .spinner {
+        animation-duration: 2.5s;
+    }
+}
+
 /* Status/Loading Message container */
 #valid {
     color: #ffb347;
