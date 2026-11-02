@@ -1,6 +1,7 @@
 /* Tells the browser the site's dark, so scrollbars, date pickers and dropdown menus come out dark too */
 :root {
     color-scheme: dark;
+    scrollbar-color: #444 #181818; /* color-scheme doesn't always reach scrollbars, so set them directly too */
 }
 
 body {
@@ -257,7 +258,16 @@ a:hover {
     margin-bottom: 1rem;
 }
 
-#graph-type, #graph-search {
+/* Holds the search box and its suggestions, which hang underneath it */
+.graph-search-wrap {
+    position: relative;
+    flex: 1;
+    min-width: 200px;
+}
+
+#graph-search {
+    width: 100%;
+    box-sizing: border-box;
     padding: 0.5rem;
     background: #282828;
     color: #f3f3f3;
@@ -265,9 +275,83 @@ a:hover {
     border-radius: 4px;
 }
 
-#graph-search {
-    flex: 1;
-    min-width: 200px;
+#graph-suggestions {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    z-index: 50;
+    list-style: none;
+    margin: 4px 0 0 0;
+    padding: 4px;
+    background: #181818;
+    border: 1px solid #333;
+    border-radius: 8px;
+    max-height: 340px;
+    overflow-y: auto;
+    box-shadow: 0 8px 16px rgba(0, 0, 0, 0.5);
+}
+
+.suggestion {
+    display: flex;
+    align-items: baseline;
+    gap: 0.5rem;
+    padding: 0.45rem 0.6rem;
+    border-radius: 4px;
+    cursor: pointer;
+}
+
+.suggestion:hover, .suggestion.active {
+    background: #2a2a2a;
+}
+
+/* Long names get cut off with ... rather than wrapping */
+.suggestion-name, .suggestion-artist {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    min-width: 0;
+}
+
+.suggestion-name {
+    color: #f3f3f3;
+    flex-shrink: 1;
+}
+
+.suggestion-artist {
+    color: #b3b3b3;
+    font-size: 0.9em;
+    flex-shrink: 2;
+}
+
+.suggestion-type {
+    margin-left: auto;
+    flex-shrink: 0;
+    color: #b3b3b3;
+    font-size: 0.75rem;
+    border: 1px solid #333;
+    border-radius: 10px;
+    padding: 0.05rem 0.5rem;
+}
+
+.suggestion-none {
+    padding: 0.45rem 0.6rem;
+    color: #888;
+}
+
+#graph-clear {
+    background: transparent;
+    border: 1px solid #333;
+    color: #b3b3b3;
+    padding: 0.5rem 0.9rem;
+    margin: 0;
+    font-size: 0.85rem;
+    font-weight: normal;
+}
+
+#graph-clear:hover {
+    background: #333;
+    color: #f3f3f3;
 }
 
 .graph-card {
@@ -533,6 +617,25 @@ a:hover {
 
     .stats-list {
         padding: 1rem 1rem 1rem 2.5rem;
+    }
+
+    /* Not enough room for name, artist and type on one line, so the artist goes underneath */
+    .suggestion {
+        display: grid;
+        grid-template-columns: 1fr auto;
+        column-gap: 0.5rem;
+        row-gap: 0.1rem;
+    }
+
+    .suggestion-artist {
+        grid-column: 1;
+        grid-row: 2;
+    }
+
+    .suggestion-type {
+        grid-column: 2;
+        grid-row: 1 / span 2;
+        align-self: center;
     }
 }
 

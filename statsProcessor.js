@@ -16,7 +16,8 @@ let appState = {
     // Graph only: the artists/albums/songs picked, each one gets its own line.
     // Each is { type, key, label, colour } with the same keys as topArtists/topAlbums/topSongs
     graphSeries: [],
-    graphType: 'artist', // What the search box is searching for: 'artist', 'album' or 'song'
+    suggestions: [], // What's showing under the search box at the moment, and which one the arrow keys are on
+    activeSuggestion: -1,
     listType: 'song', // What's in the list on screen, and the keys in order, for clicking a row
     listKeys: [],
     searchIndex: {}, // Everything you can search for, built once on load
@@ -30,7 +31,6 @@ export function calculateStats(songs) {
     // Start the filters from scratch, in case this is a second upload (the dropdowns get reset too)
     appState.timeFilter = 'all';
     appState.monthFilter = 'all';
-    appState.graphType = 'artist';
     appState.graphSeries = [];
     appState.shown = 50;
     document.getElementById('month-range').classList.add('hidden');
@@ -237,28 +237,27 @@ function setupEventListeners() {
             removeGraphPick(Number(e.target.dataset.index));
         } else if (e.target.closest('.list-item')) {
             graphFromList(Number(e.target.closest('.list-item').dataset.index));
+        } else if (e.target.id == 'graph-clear') {
+            appState.graphSeries = [];
+            render();
+        } else if (e.target.closest('.suggestion')) {
+            pickSuggestion(Number(e.target.closest('.suggestion').dataset.index));
         }
     });
 
-    // Same idea for the graph's artist/album/song search
-    viewport.addEventListener('change', (e) => {
-        if (e.target.id == 'graph-type') {
-            // Only changes what the search looks for, everything already picked stays on the graph
-            appState.graphType = e.target.value;
-            render();
-        } else if (e.target.id == 'graph-search') {
-            addGraphPick(e.target.value);
-        }
-    });
+    // Same idea for the graph's search box and its suggestions
     viewport.addEventListener('input', (e) => {
-        if (e.target.id == 'graph-search') {
-            // Clicking a suggestion comes through as an input event, not a change one (in Chrome anyway)
-            if (e.inputType == 'insertReplacementText' || !(e instanceof InputEvent)) {
-                addGraphPick(e.target.value);
-            } else {
-                fillSuggestions(e.target.value);
-            }
-        }
+        if (e.target.id == 'graph-search') showSuggestions(e.target.value);
+    });
+    viewport.addEventListener('keydown', (e) => {
+        if (e.target.id == 'graph-search') suggestionKeys(e);
+    });
+    // Clicking a suggestion would take focus off the search box (and close the list) before the click lands
+    viewport.addEventListener('pointerdown', (e) => {
+        if (e.target.closest('.suggestion')) e.preventDefault();
+    });
+    viewport.addEventListener('focusout', (e) => {
+        if (e.target.id == 'graph-search') hideSuggestions();
     });
 
     // The graph is sized to fit, so redraw it when the window gets wider or narrower.
@@ -390,20 +389,20 @@ const maxSeries = 8; // One per colour in the palette, a 9th line would need a m
 const typeNames = { artist: 'Artist', album: 'Album', song: 'Song' };
 
 function graphControlsHTML() {
-    let options = '';
-    for (const value in typeNames) {
-        options += `<option value="${value}"${appState.graphType == value ? ' selected' : ''}>${typeNames[value]}</option>`;
-    }
-
     const full = appState.graphSeries.length >= maxSeries;
-    const an = appState.graphType == 'song' ? 'a' : 'an';
     const placeholder = full ? `That's as many as it can show, remove one to add another`
-                             : `Add ${an} ${appState.graphType} to the graph...`;
+                             : `Add an artist, album or song to the graph...`;
+    // Only worth having once there's something to clear
+    const clear = appState.graphSeries.length > 0 ? `<button id="graph-clear" type="button">Clear all</button>` : '';
 
     return `<div class="graph-controls">
-                <select id="graph-type" aria-label="Search for">${options}</select>
-                <input id="graph-search" list="graph-suggestions" placeholder="${placeholder}" autocomplete="off"${full ? ' disabled' : ''}>
-                <datalist id="graph-suggestions"></datalist>
+                <div class="graph-search-wrap">
+                    <input id="graph-search" placeholder="${placeholder}" autocomplete="off"${full ? ' disabled' : ''}
+                           role="combobox" aria-label="Add to the graph" aria-autocomplete="list"
+                           aria-expanded="false" aria-controls="graph-suggestions">
+                    <ul id="graph-suggestions" role="listbox" class="hidden"></ul>
+                </div>
+                ${clear}
             </div>
             <div id="graph-area" class="graph-card"></div>`;
 }
@@ -433,7 +432,6 @@ function showGraph(data) {
         }
     }
     drawGraph(area, buildGraphData(seriesRows, from, to), seriesInfo, appState.metric);
-    fillSuggestions('');
 }
 
 // Uses the same lowercase keys as the lists, so this ignores capitals too
@@ -469,19 +467,15 @@ function addPickByKey(type, key, label) {
     return true;
 }
 
-// From the search box, which only knows the label that was picked
-function addGraphPick(label) {
-    for (const item of appState.searchIndex[appState.graphType]) {
-        if (item.label == label) {
-            if (!addPickByKey(appState.graphType, item.key, item.label)) return;
-            render();
-            // Straight back into the search box so you can add another
-            const search = document.getElementById('graph-search');
-            if (search && !search.disabled) search.focus();
-            return;
-        }
-    }
-    // Not an exact match yet (still typing), so leave the graph as it is
+// Picking one of the suggestions under the search box
+function pickSuggestion(index) {
+    const item = appState.suggestions[index];
+    if (!item) return;
+    addPickByKey(item.type, item.key, item.label);
+    render();
+    // Straight back into the search box so you can add another
+    const search = document.getElementById('graph-search');
+    if (search && !search.disabled) search.focus();
 }
 
 // From clicking a row in one of the lists. Adds it to whatever's already on the graph and switches to it
@@ -503,38 +497,166 @@ function removeGraphPick(index) {
     render();
 }
 
-// Everything you can search for, most played first so the suggestions are useful
+// Everything you can search for. Each list is most played first, so the suggestions are useful
 function buildSearchIndex(songs) {
     appState.searchIndex = { artist: [], album: [], song: [] };
     for (const [key, stats] of topArtists(songs)) {
-        appState.searchIndex.artist.push({ key: key, label: stats.name });
+        appState.searchIndex.artist.push({ type: 'artist', key: key, label: stats.name, name: stats.name, artist: '',
+                                           search: stats.name.toLowerCase() });
     }
     for (const [key, stats] of topAlbums(songs)) {
-        appState.searchIndex.album.push({ key: key, label: `${stats.name} - ${stats.artist}` });
+        const label = `${stats.name} - ${stats.artist}`;
+        appState.searchIndex.album.push({ type: 'album', key: key, label: label, name: stats.name, artist: stats.artist,
+                                          search: label.toLowerCase() });
     }
     for (const [key, stats] of topSongs(songs)) {
-        appState.searchIndex.song.push({ key: key, label: `${stats.name} - ${stats.artist}` });
+        const label = `${stats.name} - ${stats.artist}`;
+        appState.searchIndex.song.push({ type: 'song', key: key, label: label, name: stats.name, artist: stats.artist,
+                                         search: label.toLowerCase() });
     }
 }
 
-// Only puts the top 30 matches in, a datalist with 14,000 songs in it grinds to a halt.
-// Skips anything that's already on the graph
-function fillSuggestions(text) {
+// Searches artists, albums and songs all at once, so there's no picking which you're after first.
+// Every word you type has to be in there somewhere ("overcompensate twenty" finds it), and
+// the order is: names that start with what you typed, then artists, albums, songs, then most played
+function findSuggestions(text) {
+    const search = text.trim().toLowerCase();
+    const types = ['artist', 'album', 'song'];
+
+    // Nothing typed yet, so just show a few of the most played of each
+    if (search == '') {
+        let found = [];
+        const howMany = { artist: 4, album: 3, song: 3 };
+        for (const type of types) {
+            let count = 0;
+            for (const item of appState.searchIndex[type]) {
+                if (count == howMany[type]) break;
+                if (isPicked(type, item.key)) continue;
+                found.push(item);
+                count++;
+            }
+        }
+        return found;
+    }
+
+    const words = search.split(/\s+/);
+    let candidates = [];
+    for (let t = 0; t < types.length; t++) {
+        // The best 10 that start with it and the best 10 that just contain it, from each type
+        let starts = 0, contains = 0;
+        const index = appState.searchIndex[types[t]];
+        for (let i = 0; i < index.length && (starts < 10 || contains < 10); i++) {
+            const item = index[i];
+            if (!words.every(word => item.search.includes(word))) continue;
+            if (isPicked(item.type, item.key)) continue;
+            const startsWith = item.name.toLowerCase().startsWith(search);
+            if (startsWith && starts < 10) {
+                candidates.push({ item: item, score: t, rank: i });
+                starts++;
+            } else if (!startsWith && contains < 10) {
+                candidates.push({ item: item, score: 3 + t, rank: i });
+                contains++;
+            }
+        }
+    }
+    candidates.sort((a, b) => a.score - b.score || a.rank - b.rank);
+    return candidates.slice(0, 10).map(c => c.item);
+}
+
+function showSuggestions(text) {
     const list = document.getElementById('graph-suggestions');
-    if (!list) return;
-    const search = text.toLowerCase();
+    const input = document.getElementById('graph-search');
+    if (!list || !input) return;
+    appState.suggestions = findSuggestions(text);
+    appState.activeSuggestion = -1;
+    input.removeAttribute('aria-activedescendant');
     list.innerHTML = '';
 
-    let count = 0;
-    for (const item of appState.searchIndex[appState.graphType]) {
-        if (isPicked(appState.graphType, item.key)) continue;
-        if (item.label.toLowerCase().includes(search)) {
-            const option = document.createElement('option');
-            option.value = item.label;
-            list.appendChild(option);
-            count++;
-            if (count == 30) break;
+    if (appState.suggestions.length == 0) {
+        if (text.trim() == '') {
+            hideSuggestions();
+            return;
         }
+        const none = document.createElement('li');
+        none.className = 'suggestion-none';
+        none.textContent = 'Nothing matches that';
+        list.appendChild(none);
+    }
+
+    // Built with textContent rather than HTML strings, so names can't turn into markup
+    for (let i = 0; i < appState.suggestions.length; i++) {
+        const item = appState.suggestions[i];
+        const li = document.createElement('li');
+        li.className = 'suggestion';
+        li.id = `suggestion-${i}`;
+        li.dataset.index = i;
+        li.setAttribute('role', 'option');
+
+        const name = document.createElement('span');
+        name.className = 'suggestion-name';
+        name.textContent = item.name;
+        li.appendChild(name);
+        if (item.artist) {
+            const artist = document.createElement('span');
+            artist.className = 'suggestion-artist';
+            artist.textContent = item.artist;
+            li.appendChild(artist);
+        }
+        // Says what it is, so a title track and its album can be told apart
+        const type = document.createElement('span');
+        type.className = 'suggestion-type';
+        type.textContent = typeNames[item.type];
+        li.appendChild(type);
+
+        list.appendChild(li);
+    }
+    list.classList.remove('hidden');
+    input.setAttribute('aria-expanded', 'true');
+}
+
+function hideSuggestions() {
+    const list = document.getElementById('graph-suggestions');
+    const input = document.getElementById('graph-search');
+    if (list) list.classList.add('hidden');
+    if (input) {
+        input.setAttribute('aria-expanded', 'false');
+        input.removeAttribute('aria-activedescendant');
+    }
+    appState.activeSuggestion = -1;
+}
+
+function setActiveSuggestion(i) {
+    appState.activeSuggestion = i;
+    document.querySelectorAll('.suggestion').forEach(li => li.classList.toggle('active', Number(li.dataset.index) == i));
+    document.getElementById('graph-search').setAttribute('aria-activedescendant', `suggestion-${i}`);
+    document.getElementById(`suggestion-${i}`).scrollIntoView({ block: 'nearest' });
+}
+
+// Up/down to move through the suggestions (down also opens them), Enter to pick
+// (the top one if you haven't moved), Escape to close
+function suggestionKeys(e) {
+    const list = document.getElementById('graph-suggestions');
+    const open = list && !list.classList.contains('hidden');
+    const count = appState.suggestions.length;
+
+    if (e.key == 'ArrowDown' || e.key == 'ArrowUp') {
+        e.preventDefault();
+        if (!open) {
+            showSuggestions(e.target.value);
+            return;
+        }
+        if (count == 0) return;
+        let i = appState.activeSuggestion + (e.key == 'ArrowDown' ? 1 : -1);
+        if (i < 0) i = count - 1;
+        if (i >= count) i = 0;
+        setActiveSuggestion(i);
+    } else if (e.key == 'Enter') {
+        if (open && count > 0) {
+            e.preventDefault();
+            pickSuggestion(appState.activeSuggestion == -1 ? 0 : appState.activeSuggestion);
+        }
+    } else if (e.key == 'Escape') {
+        hideSuggestions();
     }
 }
 
