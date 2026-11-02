@@ -457,7 +457,14 @@ function setupEventListeners() {
         const x = e.clientX || box.left + 40;
         const y = e.clientY || box.bottom;
         press = null; // Android's long press got there first
-        openRowMenu(Number(row.dataset.index), x, y);
+        const index = Number(row.dataset.index);
+        // On Linux and Macs this comes when the button goes down, and letting go of it then counts as
+        // a click outside the menu, which closes it straight away. So open it once the button's let go
+        if (e.buttons & 2) {
+            window.addEventListener('pointerup', () => setTimeout(() => openRowMenu(index, x, y), 0), { once: true });
+        } else {
+            openRowMenu(index, x, y);
+        }
     });
 
     // iPhones don't fire contextmenu on a long press, so time it here. The menu opens when you let go:
