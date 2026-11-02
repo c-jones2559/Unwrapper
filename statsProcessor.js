@@ -5,6 +5,7 @@ import { buildGraphData, drawGraph } from './graph.js';
 let appState = {
     allData: [],
     currentView: 'songs',
+    metric: 'plays', // 'plays' or 'time', what the lists are sorted by and what the graph shows
     timeFilter: 'all', // 'all', a year like '2026', or 'custom'
     monthFilter: 'all', // 'all' or 0-11, only used when a year is picked
     customFrom: '', // "YYYY-MM-DD" from the date inputs
@@ -185,6 +186,18 @@ function setupEventListeners() {
         render();
     });
 
+    document.querySelectorAll('.metric-btn').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            appState.metric = e.target.dataset.metric;
+            document.querySelectorAll('.metric-btn').forEach(b => {
+                b.classList.toggle('active', b == e.target);
+                b.setAttribute('aria-pressed', b == e.target);
+            });
+            appState.shown = 50;
+            render();
+        });
+    });
+
     document.getElementById('month-range').addEventListener('change', (e) => {
         appState.monthFilter = e.target.value;
         appState.shown = 50;
@@ -309,6 +322,11 @@ function generateListHTML(sortedData) {
 
         const timeString = formatHoursAndMinutes(timeMs);
 
+        // Whichever it's sorted by goes first
+        const playsText = `${count.toLocaleString()} play${sOnEnd(count)}`;
+        const timeText = `<em>${timeString}</em>`;
+        const detail = appState.metric == 'time' ? `${timeText} &bull; ${playsText}` : `${playsText} &bull; ${timeText}`;
+
         // Build the main text: "Song Name" or "Song Name by Artist"
         let headerContent = `<strong>${name}</strong>`;
         if (artist) {
@@ -320,7 +338,7 @@ function generateListHTML(sortedData) {
                     <button class="list-item" data-index="${i}" title="Show on the graph">
                         ${headerContent}<br>
                         <span style="color: #b3b3b3; font-size: 0.9em;">
-                            ${count.toLocaleString()} play${sOnEnd(count)} &bull; <em>${timeString}</em>
+                            ${detail}
                         </span>
                     </button>
                  </li>`;
@@ -401,7 +419,7 @@ function showGraph(data) {
             seriesInfo.push({ label: pick.label, type: typeNames[pick.type], colour: `var(--series-${pick.colour})`, removable: true });
         }
     }
-    drawGraph(area, buildGraphData(seriesRows, from, to), seriesInfo);
+    drawGraph(area, buildGraphData(seriesRows, from, to), seriesInfo, appState.metric);
     fillSuggestions('');
 }
 
@@ -582,7 +600,7 @@ function topSongs(songs) {
             stats[key].time += song.ms_played || 0;
         }
     }
-    return Object.entries(stats).sort((a, b) => b[1].count - a[1].count);
+    return sortByMetric(stats);
 }
 
 function topArtists(songs) {
@@ -595,7 +613,7 @@ function topArtists(songs) {
             stats[key].time += song.ms_played || 0;
         }
     }
-    return Object.entries(stats).sort((a, b) => b[1].count - a[1].count);
+    return sortByMetric(stats);
 }
 
 function topAlbums(songs) {
@@ -613,5 +631,11 @@ function topAlbums(songs) {
             stats[key].time += song.ms_played || 0;
         }
     }
-    return Object.entries(stats).sort((a, b) => b[1].count - a[1].count);
+    return sortByMetric(stats);
+}
+
+// Most plays first, or most time first, depending on the Plays/Time toggle
+function sortByMetric(stats) {
+    const field = appState.metric == 'time' ? 'time' : 'count';
+    return Object.entries(stats).sort((a, b) => b[1][field] - a[1][field]);
 }

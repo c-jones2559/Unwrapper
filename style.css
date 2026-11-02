@@ -172,6 +172,34 @@ a:hover {
     color: white;
 }
 
+/* Plays / Time switch */
+.metric-toggle {
+    display: inline-flex;
+    border: 1px solid #333;
+    border-radius: 20px;
+    overflow: hidden;
+}
+
+.metric-btn {
+    background: transparent;
+    color: #b3b3b3;
+    padding: 0.45rem 0.9rem;
+    margin: 0;
+    border-radius: 0;
+    font-size: 0.85rem;
+    font-weight: normal;
+}
+
+.metric-btn:hover {
+    background: #333;
+}
+
+.metric-btn.active {
+    background: #1db954;
+    color: #fff;
+    font-weight: bold;
+}
+
 .filters {
     display: flex;
     flex-wrap: wrap;

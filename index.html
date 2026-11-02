@@ -46,6 +46,11 @@
         </div>
     
         <div class="filters">
+            <!-- Sorts the lists and switches the graph between listens and hours -->
+            <div class="metric-toggle" role="group" aria-label="Rank by">
+                <button class="metric-btn active" data-metric="plays" aria-pressed="true">Plays</button>
+                <button class="metric-btn" data-metric="time" aria-pressed="false">Time</button>
+            </div>
             <select id="time-range">
                 <option value="all">All Time</option>
             </select>

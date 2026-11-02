@@ -141,24 +141,31 @@ function keyLine(colour) {
 
 // Draws the graph into container (which has to be on the page already, or its width is 0).
 // series is one { label, type, colour, removable } per line, in the same order as the data.
-// Removable ones get a × button with data-index, the click is handled in statsProcessor
-export function drawGraph(container, graph, series) {
+// Removable ones get a × button with data-index, the click is handled in statsProcessor.
+// metric is 'plays' (listens) or 'time' (hours), from the toggle
+export function drawGraph(container, graph, series, metric) {
     container.innerHTML = '';
     const { unit, buckets } = graph;
     const single = series.length == 1;
+    const byTime = metric == 'time';
+
+    // What gets plotted for line s at bucket b, and how to write it out
+    const value = (b, s) => byTime ? b.time[s] / (1000*60*60) : b.listens[s];
+    const longValue = v => byTime ? hoursString(v * 1000*60*60) : listensString(v);
+    const shortValue = v => byTime ? `${(Math.round(v * 10) / 10).toLocaleString()}h` : v.toLocaleString();
 
     let totals = series.map(() => 0);
     let max = 0;
     for (const b of buckets) {
         for (let s = 0; s < series.length; s++) {
-            totals[s] += b.listens[s];
-            if (b.listens[s] > max) max = b.listens[s];
+            totals[s] += value(b, s);
+            if (value(b, s) > max) max = value(b, s);
         }
     }
 
     const title = document.createElement('h3');
     title.className = 'graph-title';
-    title.textContent = `Listens per ${unit}`;
+    title.textContent = `${byTime ? 'Hours' : 'Listens'} per ${unit}`;
     container.appendChild(title);
 
     // One line with nothing to remove just gets a sentence, otherwise each line gets a chip:
@@ -166,7 +173,7 @@ export function drawGraph(container, graph, series) {
     if (single && !series[0].removable) {
         const subtitle = document.createElement('p');
         subtitle.className = 'graph-subtitle';
-        subtitle.textContent = `${listensString(totals[0])} of ${series[0].label}`;
+        subtitle.textContent = `${longValue(totals[0])} of ${series[0].label}`;
         container.appendChild(subtitle);
     } else {
         const legend = document.createElement('ul');
@@ -182,7 +189,7 @@ export function drawGraph(container, graph, series) {
 
             const detail = document.createElement('span');
             detail.className = 'graph-chip-detail';
-            detail.textContent = `${series[s].type} · ${listensString(totals[s])}`;
+            detail.textContent = `${series[s].type} · ${longValue(totals[s])}`;
             chip.appendChild(detail);
 
             if (series[s].removable) {
@@ -226,11 +233,12 @@ export function drawGraph(container, graph, series) {
     const svg = svgEl('svg', { width: width, height: height, class: 'graph-svg', tabindex: 0,
         role: 'img', 'aria-label': `${title.textContent} for ${names}. Use the arrow keys to read values.` });
 
-    // Gridlines and y labels
-    for (let v = 0; v <= yMax; v += step) {
+    // Gridlines and y labels. Counts up in whole steps so hours like 0.1 + 0.2 don't come out as 0.30000000000000004
+    for (let n = 0; n * step <= yMax * 1.000001; n++) {
+        const v = n * step;
         svg.appendChild(svgEl('line', { x1: left, x2: width - right, y1: yAt(v), y2: yAt(v), class: 'graph-grid' }));
         const label = svgEl('text', { x: left - 8, y: yAt(v) + 4, 'text-anchor': 'end', class: 'graph-axis' });
-        label.textContent = v >= 10000 ? `${v / 1000}K` : v.toLocaleString();
+        label.textContent = v >= 10000 ? `${v / 1000}K` : v.toLocaleString(undefined, { maximumFractionDigits: 2 });
         svg.appendChild(label);
     }
 
@@ -260,7 +268,7 @@ export function drawGraph(container, graph, series) {
     for (let s = 0; s < series.length; s++) {
         let line = '';
         for (let i = 0; i < buckets.length; i++) {
-            line += `${i == 0 ? 'M' : 'L'}${xAt(i)},${yAt(buckets[i].listens[s])}`;
+            line += `${i == 0 ? 'M' : 'L'}${xAt(i)},${yAt(value(buckets[i], s))}`;
         }
         if (single) {
             const area = `${line}L${xAt(buckets.length - 1)},${yAt(0)}L${xAt(0)},${yAt(0)}Z`;
@@ -296,7 +304,7 @@ export function drawGraph(container, graph, series) {
         crosshair.setAttribute('visibility', 'visible');
         for (let s = 0; s < series.length; s++) {
             dots[s].setAttribute('cx', x);
-            dots[s].setAttribute('cy', yAt(b.listens[s]));
+            dots[s].setAttribute('cy', yAt(value(b, s)));
             dots[s].setAttribute('visibility', 'visible');
         }
 
@@ -304,11 +312,13 @@ export function drawGraph(container, graph, series) {
         tooltip.innerHTML = '';
         const when = document.createElement('span');
         when.className = 'graph-tooltip-when';
-        when.textContent = single ? `${bucketLabel(b, unit)} · ${hoursString(b.time[0])}` : bucketLabel(b, unit);
+        // With one line, the other measure goes underneath (hours under listens, or the other way round)
+        const other = byTime ? listensString(b.listens[0]) : hoursString(b.time[0]);
+        when.textContent = single ? `${bucketLabel(b, unit)} · ${other}` : bucketLabel(b, unit);
         if (single) {
-            const value = document.createElement('strong');
-            value.textContent = listensString(b.listens[0]);
-            tooltip.appendChild(value);
+            const strong = document.createElement('strong');
+            strong.textContent = longValue(value(b, 0));
+            tooltip.appendChild(strong);
             tooltip.appendChild(when);
         } else {
             tooltip.appendChild(when);
@@ -316,9 +326,9 @@ export function drawGraph(container, graph, series) {
                 const row = document.createElement('div');
                 row.className = 'graph-tooltip-row';
                 row.appendChild(keyLine(series[s].colour));
-                const value = document.createElement('strong');
-                value.textContent = b.listens[s].toLocaleString();
-                row.appendChild(value);
+                const strong = document.createElement('strong');
+                strong.textContent = shortValue(value(b, s));
+                row.appendChild(strong);
                 const name = document.createElement('span');
                 name.textContent = series[s].label;
                 row.appendChild(name);
@@ -393,7 +403,7 @@ export function drawGraph(container, graph, series) {
             row.insertCell().textContent = hoursString(b.time[0]);
         } else {
             for (let s = 0; s < series.length; s++) {
-                row.insertCell().textContent = b.listens[s].toLocaleString();
+                row.insertCell().textContent = shortValue(value(b, s));
             }
         }
     }
