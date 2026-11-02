@@ -103,6 +103,9 @@
 <div id="content-viewport">
     </div>
 
+    <!-- Read out by screen readers when something happens (processing, errors), never shown -->
+    <p id="announcer" class="visually-hidden" role="status" aria-live="polite"></p>
+
     <!-- The menu for right-clicking a row in the lists -->
     <div id="row-menu" class="row-menu" popover role="menu" aria-label="Options">
         <button type="button" role="menuitem" data-action="graph">View in graph</button>

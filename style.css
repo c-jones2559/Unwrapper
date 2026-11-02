@@ -47,6 +47,16 @@ p, label {
     color: #e0e0e0;
 }
 
+/* For screen readers only: off screen rather than display: none, which they'd skip too */
+.visually-hidden {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+}
+
 /* Utility Class for JS toggling */
 .hidden {
     display: none !important;
@@ -610,6 +620,10 @@ a:hover {
     margin: 0;
     border-radius: 0;
     cursor: pointer;
+    /* Holding a row on an iPhone opens its menu, not the system's copy/look up one */
+    -webkit-touch-callout: none;
+    -webkit-user-select: none;
+    user-select: none;
 }
 
 .list-item:hover {

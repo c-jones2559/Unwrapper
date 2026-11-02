@@ -235,6 +235,7 @@ export function drawGraph(container, graph, series, metric, onZoom, onZoomOut) {
     const names = series.map(s => s.label).join(', ');
     const svg = svgEl('svg', { width: width, height: height, class: 'graph-svg', tabindex: 0,
         role: 'img', 'aria-label': `${title.textContent} for ${names}. Use the arrow keys to read values, Enter to zoom in and Escape to zoom out.` });
+    plot.appendChild(svg); // On the page straight away, so the x labels can be measured
 
     // Gridlines and y labels. Counts up in whole steps so hours like 0.1 + 0.2 don't come out as 0.30000000000000004
     for (let n = 0; n * step <= yMax * 1.000001; n++) {
@@ -265,6 +266,16 @@ export function drawGraph(container, graph, series, metric, onZoom, onZoomOut) {
         const label = svgEl('text', { x: xAt(i), y: height - 8, 'text-anchor': 'middle', class: 'graph-axis' });
         label.textContent = tickLabel(buckets[i].start, unit, manyMonths);
         svg.appendChild(label);
+        // Centred on its point, a label right by the edge gets cut off ("26 Oc"), so line those up with the edge instead.
+        // Measured once it's on the page, since how wide it is depends on the font
+        const halfWidth = label.getComputedTextLength() / 2;
+        if (xAt(i) + halfWidth > width) {
+            label.setAttribute('x', width);
+            label.setAttribute('text-anchor', 'end');
+        } else if (xAt(i) - halfWidth < 0) {
+            label.setAttribute('x', 0);
+            label.setAttribute('text-anchor', 'start');
+        }
     }
 
     // One line per series. Only a single line gets the shaded area, overlapping ones turn to mud
@@ -368,11 +379,15 @@ export function drawGraph(container, graph, series, metric, onZoom, onZoomOut) {
 
     // Clicking a point zooms into it, dragging across some zooms into that stretch.
     // Moving less than a few pixels counts as a click, so a slightly shaky click still works
+    // On a phone there's no hovering, so the first tap on a point just shows its tooltip and tapping it again zooms in
     let dragStart = null;
+    let tapZooms = false;
     const half = buckets.length == 1 ? plotW / 2 : plotW / (buckets.length - 1) / 2;
     svg.addEventListener('pointerdown', (e) => {
+        const before = current;
         showAtPointer(e); // Tapping on a phone shows the tooltip
         if (!onZoom || e.button != 0) return; // Only the main button zooms in, right-click zooms out
+        tapZooms = e.pointerType != 'touch' || before == current;
         dragStart = pointerX(e);
         svg.setPointerCapture(e.pointerId); // Keep following the drag even if it leaves the graph
     });
@@ -392,6 +407,7 @@ export function drawGraph(container, graph, series, metric, onZoom, onZoomOut) {
         const moved = Math.abs(pointerX(e) - dragStart) >= 6;
         dragStart = null;
         selection.setAttribute('visibility', 'hidden');
+        if (!moved && !tapZooms) return;
         onZoom(Math.min(a, b), moved ? Math.max(a, b) : Math.min(a, b));
     });
     // Right-click zooms back out a step, instead of the browser's usual menu
@@ -428,7 +444,6 @@ export function drawGraph(container, graph, series, metric, onZoom, onZoomOut) {
         }
     });
 
-    plot.appendChild(svg);
     plot.appendChild(tooltip);
 
     // Same numbers as a table, for anyone who can't (or doesn't want to) use the hover.

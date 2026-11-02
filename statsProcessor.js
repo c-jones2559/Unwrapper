@@ -1,4 +1,4 @@
-import { msToHours, sOnEnd } from './timeBits.js?v=6';
+import { sOnEnd } from './timeBits.js?v=6';
 import { buildGraphData, drawGraph } from './graph.js?v=6';
 import { drawCard, themes, findAlbumCover } from './share.js?v=6';
 
@@ -30,6 +30,7 @@ let appState = {
     zoomStack: [], // Where the date filter was before each zoom on the graph, for Zoom out
     excluded: [], // Anything left out of the stats, each { type, key, label }. Remembered between visits
     excludedKeys: { artist: {}, album: {}, song: {} },
+    leftKeys: { artist: {}, album: {}, song: {} }, // What has plays left once the exclusions are taken out
     listType: 'song', // What's in the list on screen, and the keys in order, for clicking a row
     listKeys: [],
     searchIndex: {}, // Everything you can search for, built once on load
@@ -69,6 +70,29 @@ export function calculateStats(songs) {
     setupYearOptions(songs);
     setupEventListeners();
     render();
+    announce('Done, your stats are below.');
+}
+
+// After an upload that didn't work. Without this the stats from the last upload stay on screen,
+// and clicking a tab draws them all again as if nothing went wrong
+export function clearStats() {
+    appState.allData = [];
+    appState.data = [];
+    appState.graphSeries = [];
+    appState.zoomStack = [];
+    erasCache = null;
+    document.getElementById('bento-grid').classList.add('hidden');
+    document.getElementById('controls').classList.add('hidden');
+}
+
+// Says something to screen readers (processing, errors, looking for a cover) without showing it.
+// The box is in the page from the start, since ones added with their text already in often don't get read out
+export function announce(text) {
+    const status = document.getElementById('announcer');
+    if (!status) return;
+    // Clearing it first means the same message twice still gets read twice
+    status.textContent = '';
+    setTimeout(() => status.textContent = text, 50);
 }
 
 // 3. The Render Logic
@@ -76,7 +100,7 @@ function render() {
     const viewport = document.getElementById('content-viewport');
     
     if (appState.currentView === 'wrapped') {
-        appState.eras = buildEras(appState.data);
+        appState.eras = cachedEras();
         const years = appState.eras.eras.map(era => era.label);
         if (appState.wrappedPeriod != 'all' && !years.includes(appState.wrappedPeriod)) {
             appState.wrappedPeriod = years.length > 0 ? years[years.length - 1] : 'all';
@@ -174,7 +198,7 @@ function msToDateInput(ms) {
 // 5. Helper to Update Header
 function updateBentoStats(data) {
     const totalMs = totalTime(data);
-    document.getElementById('total-time-display').innerText = msToHours(totalMs);
+    document.getElementById('total-time-display').innerText = formatHoursAndMinutes(totalMs);
 
     const songs = topSongs(data);
     const artists = topArtists(data);
@@ -250,12 +274,13 @@ function resetZoom() {
 }
 
 // Right-clicking a row in the lists: View in graph, View on Spotify, or Exclude.
-// Opened by right-click, the menu key on a keyboard, or a long press on Android
+// Opened by right-click, the menu key on a keyboard, or a long press on a phone
 let menuIndex = -1;
 function openRowMenu(index, x, y) {
     menuIndex = index;
     const menu = document.getElementById('row-menu');
-    menu.showPopover();
+    // Android can fire its own long press as well as ours, and showing it twice throws
+    if (!menu.matches(':popover-open')) menu.showPopover();
     // Keep it on screen if the click was near the edge
     const left = Math.min(x, window.innerWidth - menu.offsetWidth - 8);
     const top = Math.min(y, window.innerHeight - menu.offsetHeight - 8);
@@ -401,8 +426,43 @@ function setupEventListeners() {
         const box = row.getBoundingClientRect();
         const x = e.clientX || box.left + 40;
         const y = e.clientY || box.bottom;
+        press = null; // Android's long press got there first
         openRowMenu(Number(row.dataset.index), x, y);
     });
+
+    // iPhones don't fire contextmenu on a long press, so time it here. The menu opens when you let go:
+    // opening it while your finger's still down means lifting it counts as a tap outside, which closes it again.
+    // The tap that follows letting go would put the row on the graph, so that gets swallowed
+    let press = null;
+    let swallowClick = false;
+    viewport.addEventListener('pointerdown', (e) => {
+        swallowClick = false;
+        const row = e.target.closest('.list-item');
+        if (e.pointerType != 'touch' || !row) return;
+        press = { index: Number(row.dataset.index), x: e.clientX, y: e.clientY, held: false };
+        const thisPress = press;
+        setTimeout(() => thisPress.held = true, 500);
+    });
+    viewport.addEventListener('pointermove', (e) => {
+        // Moved too far for a hold, probably scrolling
+        if (press && Math.hypot(e.clientX - press.x, e.clientY - press.y) > 10) press = null;
+    });
+    viewport.addEventListener('pointercancel', () => press = null);
+    viewport.addEventListener('pointerup', () => {
+        if (press && press.held) {
+            const { index, x, y } = press;
+            swallowClick = true;
+            setTimeout(() => openRowMenu(index, x, y), 0);
+        }
+        press = null;
+    });
+    viewport.addEventListener('click', (e) => {
+        if (!swallowClick) return;
+        swallowClick = false;
+        e.stopPropagation();
+        e.preventDefault();
+    }, true);
+
     document.getElementById('row-menu').addEventListener('click', (e) => {
         const item = e.target.closest('[data-action]');
         if (item) rowMenuAction(item.dataset.action);
@@ -582,7 +642,7 @@ function generateListHTML(sortedData) {
         // Build the main text: "Song Name" or "Song Name by Artist"
         let headerContent = `<strong>${name}</strong>`;
         if (artist) {
-            headerContent += `<span style="color: #888; font-weight: normal;"> - ${escapeHTML(artist)}</span>`;
+            headerContent += `<span style="color: #999; font-weight: normal;"> - ${escapeHTML(artist)}</span>`;
         }
 
         // The whole row's a button so it can be clicked (or tabbed to) to put it on the graph
@@ -624,7 +684,8 @@ function listHeaderHTML() {
     }
     return `<div class="list-header">
                 <div class="sub-tabs" role="group" aria-label="Show">${buttons}</div>
-                <p class="list-hint">Click anything to see it on the graph, or right-click for more.</p>
+                <p class="list-hint">${touchScreen ? 'Tap anything to see it on the graph, or tap and hold for more.'
+                                                   : 'Click anything to see it on the graph, or right-click for more.'}</p>
             </div>
             <div class="graph-controls">
                 <div class="graph-search-wrap">
@@ -648,6 +709,9 @@ function formatHoursAndMinutes(ms) {
     if (hours == 0) return `${remainingMinutes} minute${sOnEnd(remainingMinutes)}`;
     return `${hours.toLocaleString()} hour${sOnEnd(hours)}, ${remainingMinutes} minute${sOnEnd(remainingMinutes)}`;
 }
+
+// Phones and tablets get "tap" in the hints rather than "click" and "right-click", which they haven't got
+const touchScreen = window.matchMedia('(pointer: coarse)').matches;
 
 // 9. Stops a song called "<b>hi</b>" turning into actual HTML
 function escapeHTML(text) {
@@ -680,7 +744,8 @@ function graphControlsHTML() {
                 ${clear}
             </div>
             <div class="graph-tools">
-                <p class="list-hint">Click or drag across the graph to zoom in, right-click to zoom out.</p>
+                <p class="list-hint">${touchScreen ? 'Tap the graph to see a point and tap it again to zoom in, or drag across a stretch.'
+                                                   : 'Click or drag across the graph to zoom in, right-click to zoom out.'}</p>
                 ${appState.zoomStack.length > 0 ? '<button id="graph-reset-zoom" type="button" class="secondary-btn">Reset zoom</button>' : ''}
             </div>
             <div id="graph-area" class="graph-card"></div>`;
@@ -1012,6 +1077,16 @@ function buildEras(data) {
     return { unit: 'year', eras: eras, from: from, to: to };
 }
 
+// The eras only change with the data (a new upload or exclusion makes a new appState.data)
+// or with Plays/Time, which changes the order. So keep them rather than redo every year on each click
+let erasCache = null;
+function cachedEras() {
+    if (!erasCache || erasCache.data !== appState.data || erasCache.metric != appState.metric) {
+        erasCache = { data: appState.data, metric: appState.metric, eras: buildEras(appState.data) };
+    }
+    return erasCache.eras;
+}
+
 function eraValue(stats) {
     if (appState.metric == 'time') {
         const hours = Math.round(stats.time / (1000*60*60));
@@ -1297,13 +1372,25 @@ function applyExclusions() {
     for (const ex of appState.excluded) keys[ex.type][ex.key] = true;
     appState.excludedKeys = keys;
     appState.data = appState.allData.filter(song => !isExcludedSong(song));
+
+    // What's still left after excluding. Excluding an artist takes their songs and albums with them,
+    // so checking the exclusions alone would still offer "Hot Mulligan Lofi" with Hot Mulligan excluded
+    const left = { artist: {}, album: {}, song: {} };
+    for (const song of appState.data) {
+        if (song.artistKey) left.artist[song.artistKey] = true;
+        if (song.albumKey) left.album[song.albumKey] = true;
+        if (song.songKey) left.song[song.songKey] = true;
+    }
+    appState.leftKeys = left;
+
     // A line on the graph for something that's now excluded would just be flat, so take it off
-    appState.graphSeries = appState.graphSeries.filter(pick => !keys[pick.type][pick.key]);
+    appState.graphSeries = appState.graphSeries.filter(pick => !isExcluded(pick.type, pick.key));
     updateExcludeButton();
 }
 
+// Excluded itself, or nothing of it left because its artist or album is
 function isExcluded(type, key) {
-    return appState.excludedKeys[type][key] == true;
+    return appState.excludedKeys[type][key] == true || !appState.leftKeys[type][key];
 }
 
 // Excluding an artist takes out all their songs and albums, an album takes out its songs

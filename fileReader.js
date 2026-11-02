@@ -1,4 +1,4 @@
-import { calculateStats } from './statsProcessor.js?v=6';
+import { calculateStats, clearStats, announce } from './statsProcessor.js?v=6';
 
 // 1. Helper function to promise-ify the FileReader (makes life way easier)
 const readJsonFile = (file) => {
@@ -37,6 +37,7 @@ document.getElementById('processBtn').addEventListener('click', async () => {
     // Disabled too so it can't get clicked again halfway through
     button.disabled = true;
     button.innerHTML = `<span class="spinner" aria-hidden="true"></span>Processing...`;
+    announce("Processing your files...");
 
     try {
         const promises = Array.from(inputElement.files).map(readJsonFile);
@@ -55,14 +56,17 @@ document.getElementById('processBtn').addEventListener('click', async () => {
             }
         }
         
-        console.log("All songs:", songs);
+        songs = fromAccountData(songs);
         checkValid(songs);
 
     } catch (error) {
         console.error("Error: ", error);
-        // Say what went wrong on the page as well, otherwise the spinner just stops and nothing happens
-        document.getElementById("content-viewport").textContent =
-            typeof error == "string" ? error : "Something went wrong reading those files.";
+        // Say what went wrong on the page as well, otherwise the spinner just stops and nothing happens.
+        // Anything from an earlier upload goes too, or a tab click would quietly bring it back
+        clearStats();
+        const message = typeof error == "string" ? error : "Something went wrong reading those files.";
+        document.getElementById("content-viewport").textContent = message;
+        announce(message);
     } finally {
         button.disabled = false;
         button.textContent = "Process";
@@ -70,38 +74,55 @@ document.getElementById('processBtn').addEventListener('click', async () => {
 });
 
 function checkValid (songs) {
-    console.log("Checking valid...");
     const stats = document.getElementById("content-viewport");
 
     stats.innerHTML = "Checking file is valid, hold on a second...";
 
-    const quarter = Math.floor(songs.length/4);
     for (let i = 0; i < songs.length; i++) {
-        if (i == 0) {
-            console.log("[>-----------] 0%")
-        } else if (i == quarter) {
-            console.log("[===>--------] 25%")
-        } else if (i == quarter*2) {
-            console.log("[======>-----] 50%")
-        } else if (i == quarter*3) {
-            console.log("[=========>--] 75%")
-        } else if (i == songs.length-1) {
-            console.log("[===========>] 99%")
-        }
-
         // Only need ts and ms_played, anything else Spotify adds later can just be ignored
         const song = songs[i];
         if (song == null || typeof song.ts != "string" || isNaN(Date.parse(song.ts)) || typeof song.ms_played != "number") {
             console.error(`Files invalid. Row ${i} is missing ts or ms_played.`);
-            stats.innerHTML = "Invalid, please enter a different file. See help for more details. (help hasn't been implemented yet)";
-            return;
+            // Thrown so it ends up in the same place as every other error, which clears out any old stats
+            throw "That doesn't look like a Spotify listening history. You want the Streaming_History_Audio files from Extended streaming history, see the info page for how to get them.";
         }
     }
-    console.log("[============] 100%");
-    console.log("File valid!");
+
+    const unique = removeDuplicates(songs);
+    // An empty file, or nothing but podcasts, would otherwise make a card for "My NaN–NaN"
+    if (!unique.some(song => song.master_metadata_track_name)) {
+        throw "There aren't any music plays in those files. Podcasts and audiobooks get left out, so pick the Streaming_History_Audio files with your songs in.";
+    }
     stats.innerHTML = "(Valid file, processing...)";
-    calculateStats(removeDuplicates(songs));
+    calculateStats(unique);
     return;
+}
+
+// The "Account data" download (the one that only goes back a year) has its own names for things:
+// endTime, artistName, trackName and msPlayed, and no album. endTime is UTC like ts, but written
+// "2023-01-01 12:34", which some browsers won't read, so it's turned into a proper one here
+function fromAccountData(songs) {
+    const isOld = song => song != null && song.ts == null && typeof song.endTime == "string" && typeof song.msPlayed == "number";
+    if (!songs.some(isOld)) return songs;
+
+    // The same plays would be in an extended file too, but without a track URI or seconds
+    // to match on they can't be spotted as duplicates, so if there's an extended file just use that
+    if (songs.some(song => song != null && song.ts != null)) {
+        console.log("Got Account data and Extended streaming history together, using the extended one");
+        return songs.filter(song => !isOld(song));
+    }
+
+    return songs.map(song => {
+        if (!isOld(song)) return song;
+        return {
+            ts: `${song.endTime.replace(' ', 'T')}:00Z`,
+            ms_played: song.msPlayed,
+            // Podcasts in this download have episodeName instead of trackName, so they stay out of the music stats
+            master_metadata_track_name: song.trackName || null,
+            master_metadata_album_artist_name: song.artistName || null,
+            master_metadata_album_album_name: null
+        };
+    });
 }
 
 // Spotify's files overlap a bit, so the same play can turn up in two of them
