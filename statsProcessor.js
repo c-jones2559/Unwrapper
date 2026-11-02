@@ -1,6 +1,6 @@
-import { sOnEnd } from './timeBits.js?v=11';
-import { buildGraphData, drawGraph } from './graph.js?v=11';
-import { drawCard, themes, findAlbumCover } from './share.js?v=11';
+import { sOnEnd } from './timeBits.js?v=12';
+import { buildGraphData, drawGraph } from './graph.js?v=12';
+import { drawCard, themes, findAlbumCover } from './share.js?v=12';
 
 // 1. The Global State
 let appState = {
@@ -157,6 +157,11 @@ function render() {
             viewport.innerHTML = graphControlsHTML();
             showGraph(filteredData);
         });
+        return;
+    }
+
+    if (appState.currentView === 'fun') {
+        viewport.innerHTML = funHTML(filteredData);
         return;
     }
 
@@ -429,6 +434,11 @@ function setupEventListeners() {
             appState.listView = e.target.closest('.sub-tab').dataset.list;
             appState.shown = 50;
             render();
+        } else if (e.target.closest('.fun-pick')) {
+            // A name on the Fun tab, onto the graph like clicking it in the lists
+            const pick = e.target.closest('.fun-pick').dataset;
+            addPickByKey(pick.type, pick.key, pick.label);
+            setView('graph');
         } else if (e.target.closest('.list-item')) {
             graphFromList(Number(e.target.closest('.list-item').dataset.index));
         } else if (e.target.closest('.year-chip')) {
@@ -1249,7 +1259,7 @@ function wrappedHTML() {
     const years = appState.eras.eras.map(era => era.label).reverse();
     let chips = '';
     for (const year of years.concat('all', 'custom')) {
-        const text = { all: 'All time', custom: 'Custom range' }[year] || year;
+        const text = { all: 'All time', custom: 'Custom' }[year] || year;
         chips += `<button type="button" class="year-chip" data-year="${year}" aria-pressed="${appState.wrappedPeriod == year}">${text}</button>`;
     }
     // From and to years, only once Custom range is picked
@@ -1483,7 +1493,322 @@ function shareShareImage() {
         .catch(() => {}); // Closing the share menu counts as an error, which isn't worth mentioning
 }
 
-// 13. Excluding things from the stats
+// 13. The Fun tab: odd little things about your listening, each on its own card.
+// Follows the date filter like the lists do. New and forgotten artists need a before and an after,
+// which is the period picked, or with All Time, your last year compared with everything before it
+const dayMs = 1000*60*60*24;
+
+function funHTML(periodRows) {
+    const rows = periodRows.filter(song => song.master_metadata_track_name);
+    if (rows.length == 0) return `<p>No data found for this period.</p>`;
+
+    const all = appState.data.filter(song => song.master_metadata_track_name);
+    const bounds = getTimeBounds();
+    const picked = bounds.from != null;
+    const start = picked ? bounds.from : appState.lastPlay - 365 * dayMs;
+    const end = bounds.to != null ? bounds.to : Infinity;
+    const when = picked ? 'in this period' : 'in your last year';
+
+    const cards = [
+        newArtistsCard(all, start, end, when),
+        forgottenArtistsCard(all, start, end, when),
+        overlookedCard(rows),
+        deepCutsCard(rows),
+        skipCard(rows),
+        neverSkippedCard(rows),
+        obsessionCard(rows),
+        busiestDayCard(rows),
+        streakCard(rows),
+        comebackCard(rows),
+        clockCard(rows),
+        shuffleCard(rows),
+        varietyCard(rows),
+        firstSongCard(rows)
+    ].filter(card => card);
+
+    return `<p class="list-hint">Odd little things about your listening${picked ? ' in this period' : ''}. Click a name to see it on the graph.</p>
+            <div class="fun-grid">${cards.join('')}</div>`;
+}
+
+// One card: a title, a big headline, a line under it, and optionally a short list.
+// Each list item is { type, key, value } for an artist or song (clickable, onto the graph) or { text, value }
+function funCard(title, big, detail, items = []) {
+    let list = '';
+    for (const item of items) {
+        let name;
+        if (item.key != null) {
+            const names = appState.names[item.type][item.key];
+            const label = item.type == 'artist' ? names.name : `${names.name} - ${names.artist}`;
+            const artist = item.type == 'artist' ? '' : `<span class="fun-artist">${escapeHTML(names.artist)}</span>`;
+            name = `<button type="button" class="fun-pick" data-type="${item.type}" data-key="${escapeHTML(item.key)}" data-label="${escapeHTML(label)}">${escapeHTML(names.name)}</button>${artist}`;
+        } else {
+            name = `<span>${escapeHTML(item.text)}</span>`;
+        }
+        list += `<li><span class="fun-name">${name}</span><span class="fun-value">${escapeHTML(item.value)}</span></li>`;
+    }
+    return `<section class="fun-card">
+                <h3>${title}</h3>
+                <p class="fun-big">${escapeHTML(big)}</p>
+                <p class="fun-detail">${detail}</p>
+                ${list ? `<ol class="fun-list">${list}</ol>` : ''}
+            </section>`;
+}
+
+function funDate(ms) {
+    return new Date(ms).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' });
+}
+
+function plays(n) {
+    return `${n.toLocaleString()} play${sOnEnd(n)}`;
+}
+
+// Counted plays (30 seconds or more) for each key, from a key function
+function countBy(rows, keyOf) {
+    const counts = {};
+    for (const song of rows) {
+        const key = keyOf(song);
+        if (key == null || song.ms_played < minPlayMs) continue;
+        counts[key] = (counts[key] || 0) + 1;
+    }
+    return counts;
+}
+
+// The day a play was on in local time, as a whole number of days, so days next to each other are 1 apart
+function dayNumber(ms) {
+    const d = new Date(ms);
+    return Math.round(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()) / dayMs);
+}
+
+// Artists whose first ever play was in the period, most played first
+function newArtistsCard(all, start, end, when) {
+    const first = {};
+    for (const song of all) {
+        if (song.artistKey && !(song.playedAt >= first[song.artistKey])) first[song.artistKey] = song.playedAt;
+    }
+    const counts = countBy(all.filter(song => song.playedAt >= start && song.playedAt < end), song => song.artistKey);
+    const found = Object.keys(counts).filter(key => first[key] >= start && first[key] < end);
+    if (found.length == 0) return null;
+    found.sort((a, b) => counts[b] - counts[a]);
+    return funCard('New artists', found.length.toLocaleString(), `artists you heard for the first time ${when}`,
+        found.slice(0, 5).map(key => ({ type: 'artist', key: key, value: `${plays(counts[key])}, since ${funDate(first[key])}` })));
+}
+
+// Artists you played loads before the period and not once in it
+function forgottenArtistsCard(all, start, end, when) {
+    const before = countBy(all.filter(song => song.playedAt < start), song => song.artistKey);
+    const since = {};
+    const last = {};
+    for (const song of all) {
+        if (!song.artistKey) continue;
+        if (song.playedAt >= start && song.playedAt < end) since[song.artistKey] = true;
+        if (song.playedAt < start && !(song.playedAt <= last[song.artistKey])) last[song.artistKey] = song.playedAt;
+    }
+    const found = Object.keys(before).filter(key => before[key] >= 30 && !since[key]);
+    if (found.length == 0) return null;
+    found.sort((a, b) => before[b] - before[a]);
+    return funCard('Forgotten artists', found.length.toLocaleString(), `artists you'd played 30+ times before, and not at all ${when}`,
+        found.slice(0, 5).map(key => ({ type: 'artist', key: key, value: `${plays(before[key])}, last ${funDate(last[key])}` })));
+}
+
+// Artists where nearly every play's the same song, so the rest of their stuff's been overlooked
+function overlookedCard(rows) {
+    const byArtist = countBy(rows, song => song.artistKey);
+    const bySong = countBy(rows, song => song.songKey);
+    const topSong = {};
+    for (const key in bySong) {
+        const artist = key.slice(0, key.indexOf('\n'));
+        if (!topSong[artist] || bySong[key] > bySong[topSong[artist]]) topSong[artist] = key;
+    }
+    const found = Object.keys(byArtist).filter(key => byArtist[key] >= 25 && bySong[topSong[key]] / byArtist[key] >= 0.8);
+    if (found.length == 0) return null;
+    found.sort((a, b) => byArtist[b] - byArtist[a]);
+    return funCard('Overlooked artists', found.length.toLocaleString(), 'artists where 80% or more of your plays are one song. The rest of their stuff might be worth a go',
+        found.slice(0, 5).map(key => ({ type: 'song', key: topSong[key], value: `${Math.round(bySong[topSong[key]] / byArtist[key] * 100)}% of ${plays(byArtist[key])}` })));
+}
+
+// The artists you've gone deepest into: the most different songs of theirs played
+function deepCutsCard(rows) {
+    const songs = {};
+    for (const song of rows) {
+        if (!song.artistKey || song.ms_played < minPlayMs) continue;
+        if (!songs[song.artistKey]) songs[song.artistKey] = new Set();
+        songs[song.artistKey].add(song.songKey);
+    }
+    const ranked = Object.keys(songs).sort((a, b) => songs[b].size - songs[a].size);
+    if (ranked.length == 0) return null;
+    return funCard('Deep dives', songs[ranked[0]].size.toLocaleString(), `different songs by ${escapeHTML(appState.names.artist[ranked[0]].name)}, more than anyone else`,
+        ranked.slice(0, 5).map(key => ({ type: 'artist', key: key, value: `${songs[key].size.toLocaleString()} songs` })));
+}
+
+// Spotify says how each play ended. A skip is pressing next (or Spotify's own skipped flag).
+// Navidrome doesn't say, so it's left out of this one
+function isSkip(song) {
+    return song.reason_end == 'fwdbtn' || song.skipped === true;
+}
+
+function skipRows(rows) {
+    return rows.filter(song => song.reason_end != null || song.skipped != null);
+}
+
+function skipCard(rows) {
+    const known = skipRows(rows);
+    if (known.length < 100) return null;
+    const skips = known.filter(isSkip).length;
+    // Most skipped songs: out of ones started at least 10 times
+    const started = {}, skipped = {};
+    for (const song of known) {
+        started[song.songKey] = (started[song.songKey] || 0) + 1;
+        if (isSkip(song)) skipped[song.songKey] = (skipped[song.songKey] || 0) + 1;
+    }
+    const worst = Object.keys(skipped).filter(key => started[key] >= 10)
+        .sort((a, b) => skipped[b] / started[b] - skipped[a] / started[a] || started[b] - started[a]);
+    return funCard('Skip rate', `${Math.round(skips / known.length * 100)}%`, `of songs skipped, ${skips.toLocaleString()} of ${known.length.toLocaleString()}. These get skipped the most:`,
+        worst.slice(0, 5).map(key => ({ type: 'song', key: key, value: `${skipped[key]} of ${started[key]}` })));
+}
+
+// The opposite: your most played songs that you've never once skipped
+function neverSkippedCard(rows) {
+    const known = skipRows(rows);
+    if (known.length < 100) return null;
+    const counts = countBy(known, song => song.songKey);
+    const skippedOnce = {};
+    for (const song of known) {
+        if (isSkip(song)) skippedOnce[song.songKey] = true;
+    }
+    const found = Object.keys(counts).filter(key => !skippedOnce[key] && counts[key] >= 10).sort((a, b) => counts[b] - counts[a]);
+    if (found.length == 0) return null;
+    return funCard('Never skipped', found.length.toLocaleString(), 'songs played 10+ times that you\'ve never skipped once',
+        found.slice(0, 5).map(key => ({ type: 'song', key: key, value: plays(counts[key]) })));
+}
+
+// The most times you've played one song in a single day
+function obsessionCard(rows) {
+    const counts = countBy(rows, song => `${dayNumber(song.playedAt)}\n${song.songKey}`);
+    let best = null;
+    for (const key in counts) {
+        if (!best || counts[key] > counts[best]) best = key;
+    }
+    if (!best || counts[best] < 3) return null;
+    const day = Number(best.slice(0, best.indexOf('\n')));
+    const songKey = best.slice(best.indexOf('\n') + 1);
+    return funCard('On repeat', `${counts[best]} times`, `in one day, on ${funDate(day * dayMs)}`,
+        [{ type: 'song', key: songKey, value: '' }]);
+}
+
+// The day with the most listening, and how long
+function busiestDayCard(rows) {
+    const time = {};
+    for (const song of rows) {
+        const day = dayNumber(song.playedAt);
+        time[day] = (time[day] || 0) + song.ms_played;
+    }
+    let best = null;
+    for (const day in time) {
+        if (best == null || time[day] > time[best]) best = day;
+    }
+    const days = Object.keys(time).length;
+    const average = Object.values(time).reduce((a, b) => a + b, 0) / days;
+    return funCard('Biggest day', formatHoursAndMinutes(time[best]), `on ${funDate(Number(best) * dayMs)}. On a day you listen at all, it's usually ${formatHoursAndMinutes(average)}`);
+}
+
+// The most days in a row with something played
+function streakCard(rows) {
+    const days = [...new Set(rows.map(song => dayNumber(song.playedAt)))].sort((a, b) => a - b);
+    let best = 1, bestEnd = days[0], run = 1;
+    for (let i = 1; i < days.length; i++) {
+        run = days[i] == days[i - 1] + 1 ? run + 1 : 1;
+        if (run > best) {
+            best = run;
+            bestEnd = days[i];
+        }
+    }
+    return funCard('Longest streak', `${best.toLocaleString()} day${sOnEnd(best)}`,
+        `in a row with music, from ${funDate((bestEnd - best + 1) * dayMs)} to ${funDate(bestEnd * dayMs)}. You listened on ${days.length.toLocaleString()} days in all`);
+}
+
+// Artists you went off for ages and came back to: the longest gap with at least 10 plays either side
+function comebackCard(rows) {
+    const times = {};
+    for (const song of rows) {
+        if (!song.artistKey || song.ms_played < minPlayMs) continue;
+        if (!times[song.artistKey]) times[song.artistKey] = [];
+        times[song.artistKey].push(song.playedAt);
+    }
+    const found = [];
+    for (const key in times) {
+        const t = times[key].sort((a, b) => a - b);
+        if (t.length < 20) continue;
+        let gap = 0, back = 0;
+        for (let i = 9; i < t.length - 10; i++) {
+            if (t[i + 1] - t[i] > gap) {
+                gap = t[i + 1] - t[i];
+                back = t[i + 1];
+            }
+        }
+        if (gap >= 180 * dayMs) found.push({ key: key, gap: gap, back: back });
+    }
+    if (found.length == 0) return null;
+    found.sort((a, b) => b.gap - a.gap);
+    const months = gap => Math.round(gap / (30.44 * dayMs));
+    return funCard('Comebacks', `${months(found[0].gap)} months`, `away from ${escapeHTML(appState.names.artist[found[0].key].name)} before going back to them`,
+        found.slice(0, 5).map(c => ({ type: 'artist', key: c.key, value: `${months(c.gap)} months, back ${funDate(c.back)}` })));
+}
+
+// What time of day and day of the week you listen most
+function clockCard(rows) {
+    const hours = new Array(24).fill(0);
+    const weekdays = new Array(7).fill(0);
+    for (const song of rows) {
+        const d = new Date(song.playedAt);
+        hours[d.getHours()] += song.ms_played;
+        weekdays[d.getDay()] += song.ms_played;
+    }
+    const total = hours.reduce((a, b) => a + b, 0);
+    const peak = hours.indexOf(Math.max(...hours));
+    const day = weekdays.indexOf(Math.max(...weekdays));
+    const hour = h => new Date(2000, 0, 1, h).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
+    const share = (from, to) => `${Math.round(hours.slice(from, to).reduce((a, b) => a + b, 0) / total * 100)}%`;
+    const dayName = new Date(2000, 0, 2 + day).toLocaleDateString(undefined, { weekday: 'long' }); // 2 Jan 2000 was a Sunday
+    return funCard('When you listen', `${hour(peak)}–${hour((peak + 1) % 24)}`, `is your busiest hour, and ${dayName} your busiest day`, [
+        { text: `After midnight (${hour(0)}–${hour(5)})`, value: share(0, 5) },
+        { text: `Mornings (${hour(5)}–${hour(12)})`, value: share(5, 12) },
+        { text: `Afternoons (${hour(12)}–${hour(18)})`, value: share(12, 18) },
+        { text: `Evenings (${hour(18)}–${hour(0)})`, value: share(18, 24) }
+    ]);
+}
+
+// How much is on shuffle, and how often you let a song finish. Spotify only, Navidrome doesn't say
+function shuffleCard(rows) {
+    const known = rows.filter(song => typeof song.shuffle == 'boolean');
+    if (known.length < 100) return null;
+    const shuffled = known.filter(song => song.shuffle).length;
+    const ended = known.filter(song => song.reason_end != null);
+    const finished = ended.filter(song => song.reason_end == 'trackdone').length;
+    const items = ended.length > 0 ? [{ text: 'Songs you let finish', value: `${Math.round(finished / ended.length * 100)}%` }] : [];
+    return funCard('Shuffle', `${Math.round(shuffled / known.length * 100)}%`, 'of your Spotify listening was on shuffle', items);
+}
+
+// How many different artists, songs and albums
+function varietyCard(rows) {
+    const count = field => new Set(rows.map(song => song[field]).filter(key => key)).size;
+    const artists = count('artistKey');
+    const songs = count('songKey');
+    return funCard('Variety', `${artists.toLocaleString()} artists`, `${songs.toLocaleString()} different songs and ${count('albumKey').toLocaleString()} albums`, [
+        { text: 'Songs per artist', value: (songs / artists).toFixed(1) }
+    ]);
+}
+
+// The first thing played in the period (or ever, with All Time)
+function firstSongCard(rows) {
+    let first = null;
+    for (const song of rows) {
+        if (song.ms_played >= minPlayMs && (!first || song.playedAt < first.playedAt)) first = song;
+    }
+    if (!first) return null;
+    return funCard('Where it started', funDate(first.playedAt), 'the first song you played', [{ type: 'song', key: first.songKey, value: '' }]);
+}
+
+// 14. Excluding things from the stats
 // Anything excluded gets taken out of the data everything else works from, so all the numbers agree
 const excludedStorageKey = 'unwrapper-excluded';
 

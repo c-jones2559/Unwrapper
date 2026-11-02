@@ -930,6 +930,105 @@ dialog h3 {
     font-variant-numeric: tabular-nums;
 }
 
+/* --- FUN TAB --- */
+
+.fun-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+    gap: 1rem;
+    margin-bottom: 2rem;
+}
+
+.fun-card {
+    background: #282828;
+    border-radius: 8px;
+    padding: 1rem 1.25rem;
+}
+
+.fun-card h3 {
+    margin: 0;
+    color: #b3b3b3;
+    font-size: 0.85rem;
+    font-weight: bold;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.fun-big {
+    margin: 0.35rem 0 0.2rem 0;
+    color: #1db954;
+    font-size: 2rem;
+    font-weight: bold;
+    line-height: 1.2;
+}
+
+.fun-detail {
+    margin: 0 0 0.6rem 0;
+    color: #b3b3b3;
+    font-size: 0.9rem;
+    line-height: 1.4;
+}
+
+.fun-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+}
+
+.fun-list li {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 0.75rem;
+    padding: 0.3rem 0;
+    border-top: 1px solid #333;
+    font-size: 0.9rem;
+}
+
+/* Long names wrap rather than pushing the numbers off the card */
+.fun-name {
+    min-width: 0;
+    overflow-wrap: anywhere;
+    color: #e0e0e0;
+}
+
+.fun-artist {
+    display: block;
+    color: #999;
+    font-size: 0.8rem;
+}
+
+.fun-value {
+    flex-shrink: 0;
+    color: #b3b3b3;
+    font-size: 0.8rem;
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+}
+
+/* Names look like text, but can be clicked to put them on the graph */
+.fun-pick {
+    background: transparent;
+    color: inherit;
+    font: inherit;
+    font-weight: bold;
+    padding: 0;
+    margin: 0;
+    border-radius: 0;
+    text-align: left;
+    cursor: pointer;
+}
+
+.fun-pick:hover {
+    background: transparent;
+    color: #1db954;
+}
+
+.fun-pick:focus-visible {
+    outline: 2px solid #1db954;
+    outline-offset: 2px;
+}
+
 /* --- SHARE IMAGE --- */
 
 .share-dialog {
