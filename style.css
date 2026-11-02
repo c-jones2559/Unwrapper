@@ -296,7 +296,7 @@ a:hover {
     min-width: 200px;
 }
 
-#graph-search {
+#graph-search, #exclude-search {
     width: 100%;
     box-sizing: border-box;
     padding: 0.5rem;
@@ -306,12 +306,8 @@ a:hover {
     border-radius: 4px;
 }
 
-#graph-suggestions {
-    position: absolute;
-    top: 100%;
-    left: 0;
-    right: 0;
-    z-index: 50;
+/* Suggestion lists under the search boxes */
+.suggestions {
     list-style: none;
     margin: 4px 0 0 0;
     padding: 4px;
@@ -320,6 +316,16 @@ a:hover {
     border-radius: 8px;
     max-height: 340px;
     overflow-y: auto;
+}
+
+/* The graph's one hangs over the graph. The exclude window's one just pushes things down,
+   because the window scrolls and would cut a hanging one off */
+#graph-suggestions {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    z-index: 50;
     box-shadow: 0 8px 16px rgba(0, 0, 0, 0.5);
 }
 
@@ -751,4 +757,84 @@ a:hover {
 .info-footer {
     margin-top: 3rem !important;
     text-align: center;
+}
+
+/* --- EXCLUDE --- */
+
+#exclude-btn {
+    background: transparent;
+    border: 1px solid #333;
+    border-radius: 20px;
+    color: #b3b3b3;
+    padding: 0.45rem 0.9rem;
+    margin: 0;
+    font-size: 0.85rem;
+    font-weight: normal;
+}
+
+#exclude-btn:hover {
+    background: #333;
+    color: #f3f3f3;
+}
+
+/* Green outline once something's excluded, so it's obvious the stats aren't the whole picture */
+#exclude-btn.has-exclusions {
+    border-color: #1db954;
+    color: #f3f3f3;
+}
+
+dialog {
+    background: #282828;
+    color: #f3f3f3;
+    border: 1px solid #333;
+    border-radius: 12px;
+    padding: 1.5rem;
+    width: min(560px, 92vw);
+    max-height: 85vh;
+    box-sizing: border-box;
+    box-shadow: 0 16px 40px rgba(0, 0, 0, 0.6);
+}
+
+dialog::backdrop {
+    background: rgba(0, 0, 0, 0.65);
+}
+
+dialog h3 {
+    margin: 0 0 0.5rem 0;
+    font-size: 1.2rem;
+}
+
+.dialog-help {
+    max-width: none;
+    margin: 0 0 1rem 0;
+    color: #b3b3b3;
+    font-size: 0.9rem;
+    line-height: 1.5;
+}
+
+.exclude-list {
+    list-style: none;
+    padding: 0;
+    margin: 1rem 0;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+}
+
+.exclude-none {
+    color: #888;
+    font-size: 0.9rem;
+}
+
+.dialog-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 0.5rem;
+    margin-top: 1rem;
+}
+
+.dialog-actions button {
+    margin: 0;
+    padding: 0.5rem 1.2rem;
+    font-size: 1rem;
 }

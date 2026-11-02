@@ -48,6 +48,8 @@
         </div>
     
         <div class="filters">
+            <!-- Opens the exclude window, says how many are excluded -->
+            <button id="exclude-btn" type="button">Exclude</button>
             <!-- Sorts the lists and switches the graph between listens and hours -->
             <div class="metric-toggle" role="group" aria-label="Rank by">
                 <button class="metric-btn active" data-metric="plays" aria-pressed="true">Plays</button>
@@ -83,6 +85,22 @@
 
 <div id="content-viewport">
     </div>
+
+    <!-- Excluding things from the stats. Opened by the Exclude button -->
+    <dialog id="exclude-dialog" aria-labelledby="exclude-title">
+        <h3 id="exclude-title">Exclude from your stats</h3>
+        <p class="dialog-help">Anything here gets left out of everything: the lists, the totals, the graph and the eras. Handy for sleep sounds, white noise, or someone else using your account. It's remembered for next time.</p>
+        <div class="search-wrap">
+            <input id="exclude-search" placeholder="Search for an artist, album or song to exclude..." autocomplete="off"
+                   role="combobox" aria-label="Exclude" aria-autocomplete="list"
+                   aria-expanded="false" aria-controls="exclude-suggestions">
+            <ul id="exclude-suggestions" class="suggestions hidden" role="listbox"></ul>
+        </div>
+        <ul id="exclude-list" class="exclude-list"></ul>
+        <div class="dialog-actions">
+            <button id="exclude-done" type="button">Done</button>
+        </div>
+    </dialog>
 
     <!-- <script src="fileReader.js?v=3"></script> -->
     <!-- <script src="statsProcessor.js"></script> -->

@@ -3,7 +3,8 @@ import { buildGraphData, drawGraph } from './graph.js?v=3';
 
 // 1. The Global State
 let appState = {
-    allData: [],
+    allData: [], // Every play from the files
+    data: [], // The same minus anything excluded, which is what all the stats use
     currentView: 'songs',
     metric: 'plays', // 'plays' or 'time', what the lists are sorted by and what the graph shows
     timeFilter: 'all', // 'all', a year like '2026', or 'custom'
@@ -16,8 +17,11 @@ let appState = {
     // Graph only: the artists/albums/songs picked, each one gets its own line.
     // Each is { type, key, label, colour } with the same keys as topArtists/topAlbums/topSongs
     graphSeries: [],
-    suggestions: [], // What's showing under the search box at the moment, and which one the arrow keys are on
+    suggestions: [], // What's showing under a search box at the moment, which box, and which one the arrow keys are on
+    suggestBox: 'graph-search',
     activeSuggestion: -1,
+    excluded: [], // Anything left out of the stats, each { type, key, label }. Remembered between visits
+    excludedKeys: { artist: {}, album: {}, song: {} },
     listType: 'song', // What's in the list on screen, and the keys in order, for clicking a row
     listKeys: [],
     searchIndex: {}, // Everything you can search for, built once on load
@@ -45,6 +49,8 @@ export function calculateStats(songs) {
     appState.allData = songs;
     buildNameKeys(songs);
     buildSearchIndex(songs);
+    loadExclusions();
+    applyExclusions();
 
     document.getElementById('bento-grid').classList.remove('hidden');
     document.getElementById('controls').classList.remove('hidden');
@@ -59,7 +65,7 @@ function render() {
     const viewport = document.getElementById('content-viewport');
     
     // Filter data
-    const filteredData = filterDataByTime(appState.allData);
+    const filteredData = filterDataByTime(appState.data);
     
     // Update Header Stats
     updateBentoStats(filteredData);
@@ -240,24 +246,36 @@ function setupEventListeners() {
         } else if (e.target.id == 'graph-clear') {
             appState.graphSeries = [];
             render();
-        } else if (e.target.closest('.suggestion')) {
-            pickSuggestion(Number(e.target.closest('.suggestion').dataset.index));
         }
     });
 
-    // Same idea for the graph's search box and its suggestions
-    viewport.addEventListener('input', (e) => {
-        if (e.target.id == 'graph-search') showSuggestions(e.target.value);
+    // The search boxes (on the graph and in the exclude window) and their suggestions.
+    // The exclude window isn't inside the viewport, so these listen on the whole page
+    document.addEventListener('input', (e) => {
+        if (searchBoxes[e.target.id]) showSuggestions(e.target.id, e.target.value);
     });
-    viewport.addEventListener('keydown', (e) => {
-        if (e.target.id == 'graph-search') suggestionKeys(e);
+    document.addEventListener('keydown', (e) => {
+        if (searchBoxes[e.target.id]) suggestionKeys(e);
     });
     // Clicking a suggestion would take focus off the search box (and close the list) before the click lands
-    viewport.addEventListener('pointerdown', (e) => {
+    document.addEventListener('pointerdown', (e) => {
         if (e.target.closest('.suggestion')) e.preventDefault();
     });
-    viewport.addEventListener('focusout', (e) => {
-        if (e.target.id == 'graph-search') hideSuggestions();
+    document.addEventListener('focusout', (e) => {
+        if (searchBoxes[e.target.id]) hideSuggestions(e.target.id);
+    });
+    document.addEventListener('click', (e) => {
+        if (e.target.closest('.suggestion')) {
+            pickSuggestion(Number(e.target.closest('.suggestion').dataset.index));
+        } else if (e.target.classList.contains('exclude-remove')) {
+            removeExclusion(Number(e.target.dataset.index));
+        }
+    });
+
+    // The exclude window
+    document.getElementById('exclude-btn').addEventListener('click', openExcludeWindow);
+    document.getElementById('exclude-done').addEventListener('click', () => {
+        document.getElementById('exclude-dialog').close();
     });
 
     // The graph is sized to fit, so redraw it when the window gets wider or narrower.
@@ -270,7 +288,7 @@ function setupEventListeners() {
         lastWidth = window.innerWidth;
         clearTimeout(resizeTimer);
         resizeTimer = setTimeout(() => {
-            holdHeight(viewport, () => showGraph(filterDataByTime(appState.allData)));
+            holdHeight(viewport, () => showGraph(filterDataByTime(appState.data)));
         }, 150);
     });
 }
@@ -400,7 +418,7 @@ function graphControlsHTML() {
                     <input id="graph-search" placeholder="${placeholder}" autocomplete="off"${full ? ' disabled' : ''}
                            role="combobox" aria-label="Add to the graph" aria-autocomplete="list"
                            aria-expanded="false" aria-controls="graph-suggestions">
-                    <ul id="graph-suggestions" role="listbox" class="hidden"></ul>
+                    <ul id="graph-suggestions" class="suggestions hidden" role="listbox"></ul>
                 </div>
                 ${clear}
             </div>
@@ -467,15 +485,37 @@ function addPickByKey(type, key, label) {
     return true;
 }
 
-// Picking one of the suggestions under the search box
+// The search boxes that suggest artists/albums/songs: where their list is, what to leave out, and what picking one does
+const searchBoxes = {
+    'graph-search': {
+        list: 'graph-suggestions',
+        skip: item => isPicked(item.type, item.key) || isExcluded(item.type, item.key),
+        pick: item => {
+            addPickByKey(item.type, item.key, item.label);
+            render();
+            // Straight back into the search box so you can add another
+            const search = document.getElementById('graph-search');
+            if (search && !search.disabled) search.focus();
+        }
+    },
+    'exclude-search': {
+        list: 'exclude-suggestions',
+        skip: item => isExcluded(item.type, item.key),
+        pick: item => {
+            addExclusion(item);
+            const search = document.getElementById('exclude-search');
+            search.value = '';
+            hideSuggestions('exclude-search');
+            search.focus();
+        }
+    }
+};
+
+// Picking one of the suggestions under whichever search box is open
 function pickSuggestion(index) {
     const item = appState.suggestions[index];
     if (!item) return;
-    addPickByKey(item.type, item.key, item.label);
-    render();
-    // Straight back into the search box so you can add another
-    const search = document.getElementById('graph-search');
-    if (search && !search.disabled) search.focus();
+    searchBoxes[appState.suggestBox].pick(item);
 }
 
 // From clicking a row in one of the lists. Adds it to whatever's already on the graph and switches to it
@@ -518,8 +558,9 @@ function buildSearchIndex(songs) {
 
 // Searches artists, albums and songs all at once, so there's no picking which you're after first.
 // Every word you type has to be in there somewhere ("overcompensate twenty" finds it), and
-// the order is: names that start with what you typed, then artists, albums, songs, then most played
-function findSuggestions(text) {
+// the order is: names that start with what you typed, then artists, albums, songs, then most played.
+// skip says what to leave out (already on the graph, already excluded, etc)
+function findSuggestions(text, skip = searchBoxes['graph-search'].skip) {
     const search = text.trim().toLowerCase();
     const types = ['artist', 'album', 'song'];
 
@@ -531,7 +572,7 @@ function findSuggestions(text) {
             let count = 0;
             for (const item of appState.searchIndex[type]) {
                 if (count == howMany[type]) break;
-                if (isPicked(type, item.key)) continue;
+                if (skip(item)) continue;
                 found.push(item);
                 count++;
             }
@@ -548,7 +589,7 @@ function findSuggestions(text) {
         for (let i = 0; i < index.length && (starts < 10 || contains < 10); i++) {
             const item = index[i];
             if (!words.every(word => item.search.includes(word))) continue;
-            if (isPicked(item.type, item.key)) continue;
+            if (skip(item)) continue;
             const startsWith = item.name.toLowerCase().startsWith(search);
             if (startsWith && starts < 10) {
                 candidates.push({ item: item, score: t, rank: i });
@@ -563,18 +604,20 @@ function findSuggestions(text) {
     return candidates.slice(0, 10).map(c => c.item);
 }
 
-function showSuggestions(text) {
-    const list = document.getElementById('graph-suggestions');
-    const input = document.getElementById('graph-search');
+function showSuggestions(boxId, text) {
+    const box = searchBoxes[boxId];
+    const list = document.getElementById(box.list);
+    const input = document.getElementById(boxId);
     if (!list || !input) return;
-    appState.suggestions = findSuggestions(text);
+    appState.suggestBox = boxId;
+    appState.suggestions = findSuggestions(text, box.skip);
     appState.activeSuggestion = -1;
     input.removeAttribute('aria-activedescendant');
     list.innerHTML = '';
 
     if (appState.suggestions.length == 0) {
         if (text.trim() == '') {
-            hideSuggestions();
+            hideSuggestions(boxId);
             return;
         }
         const none = document.createElement('li');
@@ -588,7 +631,7 @@ function showSuggestions(text) {
         const item = appState.suggestions[i];
         const li = document.createElement('li');
         li.className = 'suggestion';
-        li.id = `suggestion-${i}`;
+        li.id = `${box.list}-${i}`; // Named after the list, so two lists on the page don't clash
         li.dataset.index = i;
         li.setAttribute('role', 'option');
 
@@ -614,9 +657,9 @@ function showSuggestions(text) {
     input.setAttribute('aria-expanded', 'true');
 }
 
-function hideSuggestions() {
-    const list = document.getElementById('graph-suggestions');
-    const input = document.getElementById('graph-search');
+function hideSuggestions(boxId) {
+    const list = document.getElementById(searchBoxes[boxId].list);
+    const input = document.getElementById(boxId);
     if (list) list.classList.add('hidden');
     if (input) {
         input.setAttribute('aria-expanded', 'false');
@@ -625,39 +668,158 @@ function hideSuggestions() {
     appState.activeSuggestion = -1;
 }
 
-function setActiveSuggestion(i) {
+function setActiveSuggestion(boxId, i) {
+    const listId = searchBoxes[boxId].list;
     appState.activeSuggestion = i;
-    document.querySelectorAll('.suggestion').forEach(li => li.classList.toggle('active', Number(li.dataset.index) == i));
-    document.getElementById('graph-search').setAttribute('aria-activedescendant', `suggestion-${i}`);
-    document.getElementById(`suggestion-${i}`).scrollIntoView({ block: 'nearest' });
+    document.getElementById(listId).querySelectorAll('.suggestion').forEach(li => li.classList.toggle('active', Number(li.dataset.index) == i));
+    document.getElementById(boxId).setAttribute('aria-activedescendant', `${listId}-${i}`);
+    document.getElementById(`${listId}-${i}`).scrollIntoView({ block: 'nearest' });
 }
 
 // Up/down to move through the suggestions (down also opens them), Enter to pick
 // (the top one if you haven't moved), Escape to close
 function suggestionKeys(e) {
-    const list = document.getElementById('graph-suggestions');
-    const open = list && !list.classList.contains('hidden');
+    const boxId = e.target.id;
+    const list = document.getElementById(searchBoxes[boxId].list);
+    const open = list && !list.classList.contains('hidden') && appState.suggestBox == boxId;
     const count = appState.suggestions.length;
 
     if (e.key == 'ArrowDown' || e.key == 'ArrowUp') {
         e.preventDefault();
         if (!open) {
-            showSuggestions(e.target.value);
+            showSuggestions(boxId, e.target.value);
             return;
         }
         if (count == 0) return;
         let i = appState.activeSuggestion + (e.key == 'ArrowDown' ? 1 : -1);
         if (i < 0) i = count - 1;
         if (i >= count) i = 0;
-        setActiveSuggestion(i);
+        setActiveSuggestion(boxId, i);
     } else if (e.key == 'Enter') {
         if (open && count > 0) {
             e.preventDefault();
             pickSuggestion(appState.activeSuggestion == -1 ? 0 : appState.activeSuggestion);
         }
     } else if (e.key == 'Escape') {
-        hideSuggestions();
+        // In the exclude window Escape would also close the window, so the first one just closes the list
+        if (open) {
+            e.preventDefault();
+            hideSuggestions(boxId);
+        }
     }
+}
+
+// 11. Excluding things from the stats
+// Anything excluded gets taken out of the data everything else works from, so all the numbers agree
+const excludedStorageKey = 'unwrapper-excluded';
+
+function applyExclusions() {
+    const keys = { artist: {}, album: {}, song: {} };
+    for (const ex of appState.excluded) keys[ex.type][ex.key] = true;
+    appState.excludedKeys = keys;
+    appState.data = appState.allData.filter(song => !isExcludedSong(song));
+    // A line on the graph for something that's now excluded would just be flat, so take it off
+    appState.graphSeries = appState.graphSeries.filter(pick => !keys[pick.type][pick.key]);
+    updateExcludeButton();
+}
+
+function isExcluded(type, key) {
+    return appState.excludedKeys[type][key] == true;
+}
+
+// Excluding an artist takes out all their songs and albums, an album takes out its songs
+function isExcludedSong(song) {
+    const keys = appState.excludedKeys;
+    return keys.artist[song.artistKey] == true || keys.album[song.albumKey] == true || keys.song[song.songKey] == true;
+}
+
+function addExclusion(item) {
+    if (isExcluded(item.type, item.key)) return;
+    appState.excluded.push({ type: item.type, key: item.key, label: item.label });
+    exclusionsChanged();
+}
+
+function removeExclusion(index) {
+    appState.excluded.splice(index, 1);
+    exclusionsChanged();
+}
+
+function exclusionsChanged() {
+    saveExclusions();
+    applyExclusions();
+    renderExcludeList();
+    render();
+}
+
+// Kept in the browser so they're still there next time. Wrapped in try because private
+// browsing (or blocked storage) can make localStorage throw, in which case they're just forgotten
+function loadExclusions() {
+    try {
+        const saved = JSON.parse(localStorage.getItem(excludedStorageKey) || '[]');
+        if (Array.isArray(saved)) {
+            appState.excluded = saved.filter(ex => ex && typeNames[ex.type] && typeof ex.key == 'string' && typeof ex.label == 'string');
+        }
+    } catch (err) {
+        appState.excluded = [];
+    }
+}
+
+function saveExclusions() {
+    try {
+        localStorage.setItem(excludedStorageKey, JSON.stringify(appState.excluded));
+    } catch (err) {
+        // Can't save, never mind, it'll still work until the tab's closed
+    }
+}
+
+function updateExcludeButton() {
+    const button = document.getElementById('exclude-btn');
+    if (!button) return;
+    const count = appState.excluded.length;
+    button.textContent = count > 0 ? `Excluded (${count})` : 'Exclude';
+    button.classList.toggle('has-exclusions', count > 0);
+}
+
+function renderExcludeList() {
+    const list = document.getElementById('exclude-list');
+    if (!list) return;
+    list.innerHTML = '';
+    if (appState.excluded.length == 0) {
+        const none = document.createElement('li');
+        none.className = 'exclude-none';
+        none.textContent = 'Nothing excluded yet.';
+        list.appendChild(none);
+        return;
+    }
+    for (let i = 0; i < appState.excluded.length; i++) {
+        const ex = appState.excluded[i];
+        const chip = document.createElement('li');
+        chip.className = 'graph-chip';
+        const name = document.createElement('span');
+        name.textContent = ex.label;
+        chip.appendChild(name);
+        const type = document.createElement('span');
+        type.className = 'graph-chip-detail';
+        type.textContent = typeNames[ex.type];
+        chip.appendChild(type);
+        const remove = document.createElement('button');
+        remove.className = 'graph-chip-remove exclude-remove';
+        remove.type = 'button';
+        remove.dataset.index = i;
+        remove.setAttribute('aria-label', `Stop excluding ${ex.label}`);
+        remove.textContent = '×';
+        chip.appendChild(remove);
+        list.appendChild(chip);
+    }
+}
+
+function openExcludeWindow() {
+    renderExcludeList();
+    const search = document.getElementById('exclude-search');
+    search.value = '';
+    hideSuggestions('exclude-search');
+    document.getElementById('exclude-dialog').showModal();
+    search.focus();
 }
 
 // --- DATA PROCESSORS (Updated to capture Artist name) ---
