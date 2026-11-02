@@ -1,6 +1,6 @@
-import { msToHours, sOnEnd } from './timeBits.js?v=3';
-import { buildGraphData, drawGraph } from './graph.js?v=3';
-import { drawEraCard, themes } from './share.js?v=3';
+import { msToHours, sOnEnd } from './timeBits.js?v=4';
+import { buildGraphData, drawGraph } from './graph.js?v=4';
+import { drawEraCard, themes } from './share.js?v=4';
 
 // 1. The Global State
 let appState = {
