@@ -234,12 +234,16 @@ export function drawCard(canvas, card, theme) {
     circle(ctx, cardWidth * 0.8, cardHeight * 0.6, 230);
     ctx.globalAlpha = 1;
 
-    // Header
+    // Header: the year big on the left, UNWRAPPER small on the right, sat on the same line
+    const headerY = 200;
     ctx.globalAlpha = 0.75;
     ctx.font = `bold 34px ${family}`;
-    ctx.fillText('UNWRAPPER', margin, 150);
+    ctx.textAlign = 'right';
+    ctx.fillText('UNWRAPPER', cardWidth - margin, headerY);
+    const brandWidth = ctx.measureText('UNWRAPPER').width;
+    ctx.textAlign = 'left';
     ctx.globalAlpha = 1;
-    ctx.fillText(fitText(ctx, `My ${card.label}`, textWidth, 104, 56, 'bold', family), margin, 260);
+    ctx.fillText(fitText(ctx, card.label, textWidth - brandWidth - 40, 130, 64, 'bold', family), margin, headerY);
 
     // Work out the layout before drawing the rest: two-line songs take more room, so if it's all
     // too tall, try a shorter picture box, then smaller list text, until it fits above the footer
@@ -248,7 +252,7 @@ export function drawCard(canvas, card, theme) {
     const numberWidth = 44;
     const rowGap = 16;
     let layout = null;
-    for (const option of [{ box: 560, size: 40 }, { box: 480, size: 40 }, { box: 480, size: 34 }, { box: 400, size: 32 }]) {
+    for (const option of [{ box: 620, size: 40 }, { box: 560, size: 40 }, { box: 480, size: 40 }, { box: 480, size: 34 }, { box: 400, size: 32 }]) {
         const lineHeight = Math.round(option.size * 1.2);
         const rows = items => items.map(item => fitLines(ctx, item, columnWidth - numberWidth, 2, option.size, option.size, 'bold', family).lines);
         const artistRows = rows(card.artists);
@@ -256,7 +260,7 @@ export function drawCard(canvas, card, theme) {
         const height = list => list.reduce((total, r) => total + r.length * lineHeight, 0) + Math.max(0, list.length - 1) * rowGap;
         const album = fitLines(ctx, card.topAlbum, columnWidth, 2, 64, 40, 'bold', family);
 
-        const boxTop = 320;
+        const boxTop = headerY + 70;
         const listTop = boxTop + option.box + 80;
         const listsBottom = listTop + 60 + Math.max(height(artistRows), height(songRows));
         const statsTop = listsBottom + 50;
