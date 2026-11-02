@@ -8,7 +8,7 @@ Try it at **[unwrapper.cjones.cymru](https://unwrapper.cjones.cymru)**.
 
 ## Getting your data
 
-1. Go to Spotify's [privacy settings](https://www.spotify.com/us/account/privacy/), tick **Extended streaming history** and request it. Not "Account data", that only goes back a year.
+1. Go to Spotify's [privacy settings](https://www.spotify.com/us/account/privacy/), tick **Extended streaming history** and request it. "Account data" works too, but only goes back a year.
 2. Confirm the email they send you, then wait. They say it can take up to 30 days, but it's usually a few.
 3. When it turns up, unzip it, open the site and pick all the `Streaming_History_Audio` files at once, then press Process.
 
@@ -19,7 +19,7 @@ The video and podcast files are fine to include too, they just get left out of t
 - See your top songs, artists and albums for all time, a year, a month, or any dates you pick.
 - Sort by how many times you played something, or by how long you actually spent listening to it (in the settings, behind the gear).
 - Graph your listening over time. Click anything in the lists, or search for it, to put it on the graph, and compare up to eight artists, albums or songs at once. Click a month or drag across a stretch to zoom in (right-click to zoom back out). The lists follow the same dates, and you can filter both by artist, album or song from either one, so you can see exactly what you were playing.
-- Right-click anything in the lists to see it on the graph, find it on Spotify, or exclude it.
+- Right-click (or tap and hold on a phone) anything in the lists to see it on the graph, find it on Spotify, or exclude it.
 - Make your own Wrapped for any year, or all time: your top artists, songs and album and how many minutes you listened, on a card to share, in whatever colours you like. Your eras are underneath, your top artists year by year.
 - Exclude anything you don't want counted, like sleep sounds or someone else using your account (also in the settings). It's remembered for next time.
 
