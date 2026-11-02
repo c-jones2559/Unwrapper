@@ -30,7 +30,7 @@ A play only counts if you listened for at least 30 seconds, which is the same ru
 
 I'm a computer scientist, not a data harvester. Everything happens in your browser: your files never get uploaded anywhere, I never see them and neither does the server.
 
-The one exception is photos on the Wrapped card. For each year you look at on the Wrapped tab, it looks for a photo of that year's top artist, so their name gets looked up on MusicBrainz and Wikimedia Commons. Nothing else gets sent, and you can turn it off under Customise, which it remembers. The photos are freely licensed and credited on the card.
+The one exception is album covers on the Wrapped card. For each year you look at on the Wrapped tab, it looks for the cover of that year's top artist's top album, so the artist and album names get looked up on Apple's iTunes search. Nothing else gets sent, and you can turn it off under Customise, which it remembers.
 
 ## Moved off Spotify?
 

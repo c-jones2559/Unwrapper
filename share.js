@@ -1,4 +1,4 @@
-// The shareable image: drawing it, and finding a photo of the top artist for it.
+// The shareable image: drawing it, and finding the cover of the top artist's top album for it.
 // Kept in here like the graph is in graph.js. Always drawn at 1080x1920 (the size of a phone story),
 // the preview's just shrunk down with CSS
 
@@ -19,26 +19,17 @@ export const themes = [
 const margin = 80;
 const textWidth = cardWidth - margin * 2;
 
-// --- Finding a photo ---
-// MusicBrainz finds the artist, Wikidata says which photo of them to use, and Wikimedia Commons has it.
-// All three are free and let other sites use them, and the photos are freely licensed (with a credit).
-// Only uses a photo if MusicBrainz's name matches exactly, so it never puts the wrong band on the card.
-// Gives back { image, credit }, or null if there's no photo. Throws if something goes wrong
-// (network, MusicBrainz being busy), so that can be tried again rather than remembered as "no photo"
+// --- Finding the album cover ---
+// Looks up the album on Apple's iTunes search, which lets other sites use both the search and the covers.
+// Only uses a cover if the artist and the album both match, so it never shows the wrong one.
+// Gives back { image, album }, or null if there isn't one. Throws if something goes wrong
+// (no internet, say), so that can be tried again rather than remembered as "no cover"
 
-const wait = ms => new Promise(resolve => setTimeout(resolve, ms));
-
-// 503 means MusicBrainz is busy (or it's being asked too quickly), so wait a bit and try again, twice at most
-async function getJSON(url, triesLeft = 2) {
+async function getJSON(url) {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), 8000);
     try {
         const response = await fetch(url, { signal: controller.signal });
-        if (response.status == 503 && triesLeft > 0) {
-            clearTimeout(timer);
-            await wait(1500);
-            return getJSON(url, triesLeft - 1);
-        }
         if (!response.ok) throw new Error(`${response.status} from ${url}`);
         return await response.json();
     } finally {
@@ -56,36 +47,37 @@ function loadImage(url) {
     });
 }
 
-export async function findArtistPhoto(name) {
-    // Quotes and backslashes have to be escaped in a MusicBrainz search
-    const query = `artist:"${name.replace(/[\\"]/g, '\\$&')}"`;
-    const found = await getJSON(`https://musicbrainz.org/ws/2/artist?query=${encodeURIComponent(query)}&fmt=json&limit=5`);
-    const artist = (found.artists || []).find(a => a.name.toLowerCase() == name.toLowerCase() && a.score >= 90);
-    if (!artist) return null;
+// For comparing names: lowercase, without "(Deluxe Edition)", "[Remastered]" or " - EP" on the end,
+// and without punctuation, so "Clancy (Deluxe)" matches "Clancy" and "Los Campesinos!" matches "Los Campesinos"
+export function simplifyName(text) {
+    return text.toLowerCase()
+        .replace(/\s*[\(\[][^\)\]]*[\)\]]/g, '')
+        .replace(/\s+-\s+(ep|single)$/, '')
+        .replace(/&/g, 'and')
+        .replace(/[^\p{L}\p{N}]+/gu, ' ')
+        .trim();
+}
 
-    await wait(1100); // MusicBrainz asks for no more than one request a second
-    const details = await getJSON(`https://musicbrainz.org/ws/2/artist/${artist.id}?inc=url-rels&fmt=json`);
-    const wikidata = (details.relations || []).find(r => r.type == 'wikidata');
-    if (!wikidata) return null;
-    const entity = wikidata.url.resource.split('/').pop();
+// Two steps: find the artist, then go through their whole catalogue for the album. Searching for the
+// artist and album together misses loads (iTunes's search is fussy), and searching the artist alone
+// only lists some of their albums
+export async function findAlbumCover(artist, album) {
+    const wantArtist = simplifyName(artist);
+    const wantAlbum = simplifyName(album);
+    if (!wantArtist || !wantAlbum) return null;
 
-    const claims = await getJSON(`https://www.wikidata.org/w/api.php?action=wbgetclaims&entity=${entity}&property=P18&format=json&origin=*`);
-    const file = claims.claims && claims.claims.P18 && claims.claims.P18[0].mainsnak.datavalue.value;
-    if (!file) return null;
+    const artists = await getJSON(`https://itunes.apple.com/search?term=${encodeURIComponent(artist)}&entity=musicArtist&limit=10`);
+    const match = (artists.results || []).find(result => simplifyName(result.artistName || '') == wantArtist);
+    if (!match) return null;
 
-    const info = await getJSON('https://commons.wikimedia.org/w/api.php?action=query&prop=imageinfo&iiprop=url|extmetadata' +
-        '&iiurlwidth=1000&iiextmetadatafilter=Artist|LicenseShortName&format=json&origin=*&titles=' + encodeURIComponent(`File:${file}`));
-    const page = Object.values(info.query.pages)[0];
-    if (!page.imageinfo) return null;
-    const imageInfo = page.imageinfo[0];
-    const image = await loadImage(imageInfo.thumburl);
+    const catalogue = await getJSON(`https://itunes.apple.com/lookup?id=${match.artistId}&entity=album&limit=200`);
+    const found = (catalogue.results || []).find(result =>
+        result.wrapperType == 'collection' && simplifyName(result.collectionName || '') == wantAlbum);
+    if (!found || !found.artworkUrl100) return null;
 
-    // The photographer comes back as HTML (usually a link), so just take the text out of it
-    const meta = imageInfo.extmetadata || {};
-    const author = meta.Artist ? new DOMParser().parseFromString(meta.Artist.value, 'text/html').body.textContent.trim() : '';
-    const licence = meta.LicenseShortName ? meta.LicenseShortName.value : '';
-    const credit = 'Photo: ' + [author, licence, 'Wikimedia Commons'].filter(part => part).join(', ');
-    return { image: image, credit: credit };
+    // The catalogue gives a tiny 100px cover, but the same address does bigger ones
+    const image = await loadImage(found.artworkUrl100.replace('100x100bb', '1000x1000bb'));
+    return { image: image, album: album };
 }
 
 // --- Text ---
@@ -152,14 +144,35 @@ export function hyphenLines(ctx, text, maxWidth) {
     return lines;
 }
 
-// Up to maxLines lines, hyphenated, at the biggest size that fits (going no smaller than minSize).
+// Plain wrapping, a whole word at a time, never breaking one
+export function wordLines(ctx, text, maxWidth) {
+    let lines = [];
+    let line = '';
+    for (const word of text.split(/\s+/)) {
+        const attempt = line ? `${line} ${word}` : word;
+        if (line && ctx.measureText(attempt).width > maxWidth) {
+            lines.push(line);
+            line = word;
+        } else {
+            line = attempt;
+        }
+    }
+    if (line) lines.push(line);
+    return lines;
+}
+
+// Up to maxLines lines, at the biggest size that fits (going no smaller than minSize).
+// Whole words first, at every size. Words only get broken with a hyphen if they can't fit without,
+// since there's no point hyphenating something that would've fitted on the next line anyway.
 // If it still won't fit at the smallest size, the last line ends with ... instead
 export function fitLines(ctx, text, maxWidth, maxLines, size, minSize, weight, family) {
-    for (let s = size; s >= minSize; s -= 2) {
-        ctx.font = `${weight} ${s}px ${family}`;
-        const lines = hyphenLines(ctx, text, maxWidth);
-        if (lines.length <= maxLines && lines.every(l => ctx.measureText(l).width <= maxWidth)) {
-            return { lines: lines, size: s };
+    for (const wrap of [wordLines, hyphenLines]) {
+        for (let s = size; s >= minSize; s -= 2) {
+            ctx.font = `${weight} ${s}px ${family}`;
+            const lines = wrap(ctx, text, maxWidth);
+            if (lines.length <= maxLines && lines.every(l => ctx.measureText(l).width <= maxWidth)) {
+                return { lines: lines, size: s };
+            }
         }
     }
     ctx.font = `${weight} ${minSize}px ${family}`;
@@ -181,8 +194,8 @@ function circle(ctx, x, y, r) {
     ctx.fill();
 }
 
-// Draws the photo filling the box (cropping whatever doesn't fit), with rounded corners.
-// Crops more off the bottom than the top, since that's usually where faces aren't
+// Draws the image filling the box (cropping whatever doesn't fit), with rounded corners.
+// Album covers are square and the box is too, so normally nothing's cropped
 function drawCover(ctx, image, x, y, w, h, radius) {
     const scale = Math.max(w / image.width, h / image.height);
     const sw = w / scale, sh = h / scale;
@@ -196,7 +209,7 @@ function drawCover(ctx, image, x, y, w, h, radius) {
     ctx.restore();
 }
 
-// card is { label, artists: [up to 5], songs: [up to 5], minutes, topAlbum, photo: { image, credit } or null }
+// card is { label, artists: [up to 5], songs: [up to 5], minutes, topAlbum, cover: { image, album } or null }
 // theme is one of the themes above (or someone's own colours in the same shape)
 export function drawCard(canvas, card, theme) {
     canvas.width = cardWidth;
@@ -228,7 +241,7 @@ export function drawCard(canvas, card, theme) {
     ctx.fillText(fitText(ctx, `My ${card.label}`, textWidth, 104, 56, 'bold', family), margin, 260);
 
     // Work out the layout before drawing the rest: two-line songs take more room, so if it's all
-    // too tall, try a shorter photo box, then smaller list text, until it fits above the footer
+    // too tall, try a shorter picture box, then smaller list text, until it fits above the footer
     const columnGap = 40;
     const columnWidth = (textWidth - columnGap) / 2;
     const numberWidth = 44;
@@ -243,7 +256,7 @@ export function drawCard(canvas, card, theme) {
         const album = fitLines(ctx, card.topAlbum, columnWidth, 2, 64, 40, 'bold', family);
 
         const boxTop = 320;
-        const listTop = boxTop + option.box + (card.photo ? 110 : 80);
+        const listTop = boxTop + option.box + 80;
         const listsBottom = listTop + 60 + Math.max(height(artistRows), height(songRows));
         const statsTop = listsBottom + 50;
         const statsBottom = statsTop + 100 + (album.lines.length - 1) * Math.round(album.size * 1.1);
@@ -251,13 +264,38 @@ export function drawCard(canvas, card, theme) {
         if (statsBottom <= 1690) break;
     }
 
-    // The top artist: their photo, or failing that their name, big, over two lines at most
+    // The top artist: their top album's cover with their name beside it, or failing that their name, big
     const box = { x: margin, y: layout.boxTop, w: textWidth, h: layout.box };
-    if (card.photo) {
-        drawCover(ctx, card.photo.image, box.x, box.y, box.w, box.h, 32);
+    if (card.cover) {
+        const size = box.h;
+        drawCover(ctx, card.cover.image, box.x, box.y, size, size, 24);
+        const sideX = box.x + size + 40;
+        const sideWidth = box.x + box.w - sideX;
+
         ctx.globalAlpha = 0.75;
-        ctx.fillText(fitText(ctx, card.photo.credit, textWidth, 22, 18, 'normal', family), margin, box.y + box.h + 36);
+        ctx.font = `bold 30px ${family}`;
+        ctx.fillText('TOP ARTIST', sideX, box.y + 34);
         ctx.globalAlpha = 1;
+        const name = fitLines(ctx, card.artists[0], sideWidth, 2, 64, 34, 'bold', family);
+        let nameY = box.y + 34 + Math.round(name.size * 1.25);
+        for (const line of name.lines) {
+            ctx.fillText(line, sideX, nameY);
+            nameY += Math.round(name.size * 1.1);
+        }
+
+        // Which album the cover is, at the bottom of the column
+        const album = fitLines(ctx, card.cover.album, sideWidth, 2, 40, 26, 'bold', family);
+        const albumLine = Math.round(album.size * 1.15);
+        let albumY = box.y + size - 6 - albumLine * (album.lines.length - 1);
+        ctx.globalAlpha = 0.75;
+        ctx.font = `bold 30px ${family}`;
+        ctx.fillText('THEIR TOP ALBUM', sideX, albumY - albumLine - 6);
+        ctx.globalAlpha = 1;
+        ctx.font = `bold ${album.size}px ${family}`;
+        for (const line of album.lines) {
+            ctx.fillText(line, sideX, albumY);
+            albumY += albumLine;
+        }
     } else {
         ctx.globalAlpha = 0.12;
         ctx.beginPath();

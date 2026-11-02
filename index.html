@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <!-- The ?v= stops browsers mixing old and new files after an update. When changing any
          CSS or JS, bump it everywhere (grep for "?v=": both html files and the imports in the js) -->
-    <link rel="stylesheet" href="style.css?v=4">
+    <link rel="stylesheet" href="style.css?v=5">
     <title>Unwrapper</title>
     <link rel="manifest" href="manifest.json">
     <link rel="icon" href="icons/icon-192.png" type="image/png">
@@ -20,7 +20,7 @@
     <!-- <button id="processBtn" onclick="buttonClick()">Process</button> -->
 
     <button id="processBtn">Process</button>
-    <script type="module" src="fileReader.js?v=4"></script>
+    <script type="module" src="fileReader.js?v=5"></script>
     
     <!-- <p id="valid"></p> -->
 
@@ -105,6 +105,7 @@
 
     <!-- Excluding things from the stats. Opened by the Exclude button -->
     <dialog id="exclude-dialog" aria-labelledby="exclude-title">
+        <button type="button" class="dialog-close" aria-label="Close">×</button>
         <h3 id="exclude-title">Exclude from your stats</h3>
         <p class="dialog-help">Anything here gets left out of everything: the lists, the totals, the graph and the eras. Handy for sleep sounds, white noise, or someone else using your account. It's remembered for next time.</p>
         <div class="search-wrap">
@@ -122,6 +123,7 @@
 
     <!-- Customising the Wrapped card. Opened from the Wrapped tab -->
     <dialog id="share-dialog" class="share-dialog" aria-labelledby="share-title">
+        <button type="button" class="dialog-close" aria-label="Close">×</button>
         <h3 id="share-title">Customise</h3>
         <div class="share-layout">
             <canvas id="share-canvas" width="1080" height="1920" role="img" aria-label="Preview of the image"></canvas>
@@ -133,12 +135,12 @@
                     <label>Bottom <input type="color" id="colour-bottom"></label>
                     <label>Text <input type="color" id="colour-text"></label>
                 </div>
-                <h4>Photo</h4>
+                <h4>Album cover</h4>
                 <label class="share-check">
                     <input type="checkbox" id="share-photo" checked>
-                    <span>Look for a photo of your top artist
-                        <small>Each year you look at on the Wrapped tab, that year's top artist gets looked up on
-                        MusicBrainz and Wikimedia. Nothing else is sent. If there isn't a photo, their name goes there instead.</small></span>
+                    <span>Show the cover of your top artist's top album
+                        <small>Each year you look at on the Wrapped tab, that year's top artist and their top album get looked up
+                        on Apple's iTunes search. Nothing else is sent. If there isn't a cover, their name goes there instead.</small></span>
                 </label>
                 <div class="dialog-actions">
                     <button id="share-close" type="button" class="secondary-btn">Done</button>
@@ -149,7 +151,7 @@
         </div>
     </dialog>
 
-    <!-- <script src="fileReader.js?v=4"></script> -->
+    <!-- <script src="fileReader.js?v=5"></script> -->
     <!-- <script src="statsProcessor.js"></script> -->
 </body>
 </html>

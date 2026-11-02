@@ -1,6 +1,6 @@
-import { msToHours, sOnEnd } from './timeBits.js?v=4';
-import { buildGraphData, drawGraph } from './graph.js?v=4';
-import { drawCard, themes, findArtistPhoto } from './share.js?v=4';
+import { msToHours, sOnEnd } from './timeBits.js?v=5';
+import { buildGraphData, drawGraph } from './graph.js?v=5';
+import { drawCard, themes, findAlbumCover } from './share.js?v=5';
 
 // 1. The Global State
 let appState = {
@@ -25,8 +25,8 @@ let appState = {
     eras: null, // The eras on screen, kept for making the share image
     wrappedPeriod: null, // The year the Wrapped card's for ('2026', or 'all'). Starts on the latest year
     shareTheme: { ...themes[0] }, // The card's colours
-    sharePhotos: true, // Whether to look up a photo of the top artist
-    photoCache: {}, // Photos looked up so far, by artist name: { status, photo }
+    shareCovers: true, // Whether to look up the top artist's album cover
+    coverCache: {}, // Covers looked up so far, by artist and album: { status, cover }
     excluded: [], // Anything left out of the stats, each { type, key, label }. Remembered between visits
     excludedKeys: { artist: {}, album: {}, song: {} },
     listType: 'song', // What's in the list on screen, and the keys in order, for clicking a row
@@ -59,7 +59,7 @@ export function calculateStats(songs) {
     buildSearchIndex(songs);
     loadExclusions();
     applyExclusions();
-    loadPhotoSetting();
+    loadCoverSetting();
 
     document.getElementById('bento-grid').classList.remove('hidden');
     document.getElementById('controls').classList.remove('hidden');
@@ -325,8 +325,8 @@ function setupEventListeners() {
         });
     }
     document.getElementById('share-photo').addEventListener('change', (e) => {
-        appState.sharePhotos = e.target.checked;
-        savePhotoSetting();
+        appState.shareCovers = e.target.checked;
+        saveCoverSetting();
         redrawCards();
     });
     document.getElementById('share-download').addEventListener('click', downloadShareImage);
@@ -335,6 +335,23 @@ function setupEventListeners() {
         document.getElementById('share-dialog').close();
     });
     document.getElementById('share-dialog').addEventListener('close', redrawCards);
+
+    // Both windows close with the x in the corner, or by clicking outside them. A click outside lands on the
+    // dialog itself but outside its box. Only counts if the press started outside too, so dragging out of the
+    // window (selecting text, say) doesn't close it
+    document.querySelectorAll('dialog').forEach(dialog => {
+        let pressedOutside = false;
+        const outside = (e) => {
+            const box = dialog.getBoundingClientRect();
+            return e.target == dialog && (e.clientX < box.left || e.clientX > box.right || e.clientY < box.top || e.clientY > box.bottom);
+        };
+        dialog.addEventListener('pointerdown', (e) => { pressedOutside = outside(e); });
+        dialog.addEventListener('click', (e) => {
+            if (pressedOutside && outside(e)) dialog.close();
+            pressedOutside = false;
+        });
+        dialog.querySelector('.dialog-close').addEventListener('click', () => dialog.close());
+    });
 
     // The exclude window
     document.getElementById('exclude-btn').addEventListener('click', () => {
@@ -880,20 +897,35 @@ function rangeLabel() {
 }
 
 // What goes on the card: the same things as Wrapped (bar genre, which Spotify's data doesn't have,
-// so it's top album instead), plus a photo of the top artist if one's been found
+// so it's top album instead), plus the cover of the top artist's own top album if it's been found
 function currentCard() {
     const rows = wrappedRows();
-    const artists = topArtists(rows).slice(0, 5).map(entry => entry[1].name);
+    const topArtistList = topArtists(rows);
+    const artists = topArtistList.slice(0, 5).map(entry => entry[1].name);
     const topAlbum = topAlbums(rows)[0];
-    const lookup = appState.sharePhotos && artists[0] ? appState.photoCache[artists[0]] : null;
+
+    // The top artist's most played album, which is what the cover's of
+    let artistAlbum = null;
+    if (topArtistList.length > 0) {
+        const artistKey = topArtistList[0][0];
+        const theirs = topAlbums(rows.filter(song => song.artistKey == artistKey))[0];
+        if (theirs) artistAlbum = theirs[1].name;
+    }
+    const lookup = appState.shareCovers && artistAlbum ? appState.coverCache[coverKey(artists[0], artistAlbum)] : null;
+
     return {
         label: appState.wrappedPeriod == 'all' ? rangeLabel() : appState.wrappedPeriod,
         artists: artists,
         songs: topSongs(rows).slice(0, 5).map(entry => entry[1].name),
         minutes: Math.round(totalTime(rows) / 60000),
         topAlbum: topAlbum ? topAlbum[1].name : '-',
-        photo: lookup && lookup.status == 'found' ? lookup.photo : null
+        artistAlbum: artistAlbum,
+        cover: lookup && lookup.status == 'found' ? lookup.cover : null
     };
+}
+
+function coverKey(artist, album) {
+    return `${artist}\n${album}`;
 }
 
 function wrappedHTML() {
@@ -929,60 +961,62 @@ function redrawCards() {
         drawCard(canvas, card, appState.shareTheme);
     }
     // Start looking first, so the status line can say it's looking
-    if (card.artists[0]) lookForPhoto(card.artists[0]);
-    updatePhotoStatus(card.artists[0]);
+    if (card.artistAlbum) lookForCover(card.artists[0], card.artistAlbum);
+    updateCoverStatus(card);
     makeShareFile();
 }
 
-// Looks up a photo of the top artist, one at a time (MusicBrainz doesn't like being rushed).
-// Found or not, the answer's remembered. If it fails, it's forgotten so it can be tried again later
-let photoQueue = Promise.resolve();
-function lookForPhoto(name) {
-    if (!appState.sharePhotos || appState.photoCache[name]) return;
-    appState.photoCache[name] = { status: 'looking' };
-    photoQueue = photoQueue.then(async () => {
+// Looks up the cover of the top artist's top album, one at a time.
+// Found or not, the answer's remembered. If it fails, it's forgotten after a bit so it can be tried again
+let coverQueue = Promise.resolve();
+function lookForCover(artist, album) {
+    const key = coverKey(artist, album);
+    if (!appState.shareCovers || appState.coverCache[key]) return;
+    appState.coverCache[key] = { status: 'looking' };
+    coverQueue = coverQueue.then(async () => {
         try {
-            const photo = await findArtistPhoto(name);
-            appState.photoCache[name] = photo ? { status: 'found', photo: photo } : { status: 'none' };
+            const cover = await findAlbumCover(artist, album);
+            appState.coverCache[key] = cover ? { status: 'found', cover: cover } : { status: 'none' };
         } catch (err) {
-            console.error(`Couldn't look up a photo of ${name}:`, err);
-            appState.photoCache[name] = { status: 'failed' };
+            console.error(`Couldn't look up the cover of ${album} by ${artist}:`, err);
+            appState.coverCache[key] = { status: 'failed' };
             setTimeout(() => {
-                if (appState.photoCache[name] && appState.photoCache[name].status == 'failed') delete appState.photoCache[name];
+                if (appState.coverCache[key] && appState.coverCache[key].status == 'failed') delete appState.coverCache[key];
             }, 30000);
         }
         // Only redraw if it's still the same card on screen
-        if (currentCard().artists[0] == name) redrawCards();
+        const now = currentCard();
+        if (now.artists[0] == artist && now.artistAlbum == album) redrawCards();
     });
 }
 
-function updatePhotoStatus(name) {
+function updateCoverStatus(card) {
     const status = document.getElementById('photo-status');
     if (!status) return;
-    const lookup = name ? appState.photoCache[name] : null;
+    const lookup = appState.shareCovers && card.artistAlbum ? appState.coverCache[coverKey(card.artists[0], card.artistAlbum)] : null;
     let text = '';
-    if (appState.sharePhotos && lookup) {
-        if (lookup.status == 'looking') text = `Looking for a photo of ${name}...`;
-        else if (lookup.status == 'none') text = `Couldn't find a photo of ${name}, so it's their name instead.`;
-        else if (lookup.status == 'failed') text = `Couldn't look for a photo just now, so it's ${name}'s name instead.`;
-        else if (lookup.status == 'unusable') text = `The photo of ${name} couldn't be used, so it's their name instead.`;
+    if (lookup) {
+        if (lookup.status == 'looking') text = `Looking for the cover of ${card.artistAlbum}...`;
+        else if (lookup.status == 'none') text = `Couldn't find the cover of ${card.artistAlbum}, so it's ${card.artists[0]}'s name instead.`;
+        else if (lookup.status == 'failed') text = `Couldn't look for the cover just now, so it's ${card.artists[0]}'s name instead.`;
+        else if (lookup.status == 'unusable') text = `The cover of ${card.artistAlbum} couldn't be used, so it's ${card.artists[0]}'s name instead.`;
     }
     status.textContent = text;
 }
 
-// Whether to look for photos is remembered, like exclusions, so turning it off sticks.
+// Whether to look for covers is remembered, like exclusions, so turning it off sticks.
 // In try for the same reason: private browsing can make localStorage throw
-function loadPhotoSetting() {
+function loadCoverSetting() {
     try {
-        appState.sharePhotos = localStorage.getItem('unwrapper-photos') != 'off';
+        appState.shareCovers = localStorage.getItem('unwrapper-covers') != 'off';
     } catch (err) {
-        appState.sharePhotos = true;
+        appState.shareCovers = true;
     }
 }
 
-function savePhotoSetting() {
+function saveCoverSetting() {
     try {
-        localStorage.setItem('unwrapper-photos', appState.sharePhotos ? 'on' : 'off');
+        localStorage.setItem('unwrapper-covers', appState.shareCovers ? 'on' : 'off');
     } catch (err) {
         // Can't save, it'll just be on again next time
     }
@@ -997,7 +1031,7 @@ function setWrappedPeriod(period) {
 function openShareWindow() {
     buildSwatches();
     setColourInputs();
-    document.getElementById('share-photo').checked = appState.sharePhotos;
+    document.getElementById('share-photo').checked = appState.shareCovers;
     document.getElementById('share-dialog').showModal();
     redrawCards();
 }
@@ -1048,12 +1082,13 @@ function makeShareFile() {
                 updateShareButtons();
             }, 'image/png');
         } catch (err) {
-            // A browser won't let a picture be saved if a photo on it came from somewhere that didn't allow it.
-            // Shouldn't happen with Wikimedia, but if it does, drop the photo rather than leave Download dead
-            console.error("Couldn't save the card with that photo on:", err);
-            const artist = currentCard().artists[0];
-            if (artist && appState.photoCache[artist]) {
-                appState.photoCache[artist] = { status: 'unusable' };
+            // A browser won't let a picture be saved if an image on it came from somewhere that didn't allow it.
+            // Shouldn't happen with iTunes, but if it does, drop the cover rather than leave Download dead
+            console.error("Couldn't save the card with that cover on:", err);
+            const card = currentCard();
+            const key = card.artistAlbum ? coverKey(card.artists[0], card.artistAlbum) : null;
+            if (key && appState.coverCache[key]) {
+                appState.coverCache[key] = { status: 'unusable' };
                 redrawCards();
             }
         }
