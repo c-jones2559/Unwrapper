@@ -261,7 +261,7 @@ a:hover {
     color: #b3b3b3;
 }
 
-#time-range, #month-range, #custom-range input {
+#time-range, #month-range, #custom-range input, .wrapped-range select {
     padding: 0.5rem;
     background: #282828;
     color: #f3f3f3;
@@ -1221,6 +1221,15 @@ dialog h3 {
     display: flex;
     flex-wrap: wrap;
     gap: 0.5rem;
+}
+
+/* The from and to years for a custom range, under the year buttons */
+.wrapped-range {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-top: 0.75rem;
+    color: #b3b3b3;
 }
 
 .year-chip {

@@ -1,6 +1,6 @@
-import { sOnEnd } from './timeBits.js?v=10';
-import { buildGraphData, drawGraph } from './graph.js?v=10';
-import { drawCard, themes, findAlbumCover } from './share.js?v=10';
+import { sOnEnd } from './timeBits.js?v=11';
+import { buildGraphData, drawGraph } from './graph.js?v=11';
+import { drawCard, themes, findAlbumCover } from './share.js?v=11';
 
 // 1. The Global State
 let appState = {
@@ -23,7 +23,9 @@ let appState = {
     suggestBox: 'graph-search',
     activeSuggestion: -1,
     eras: null, // The eras on screen, kept for making the share image
-    wrappedPeriod: null, // The year the Wrapped card's for ('2026', or 'all'). Starts on the latest year
+    wrappedPeriod: null, // The year the Wrapped card's for ('2026', 'all' or 'custom'). Starts on the latest year
+    wrappedFrom: null, // The first and last year for 'custom', like '2021' and '2023'
+    wrappedTo: null,
     shareTheme: { ...themes[0] }, // The card's colours
     shareCovers: true, // Whether to look up the top artist's album cover
     coverCache: {}, // Covers looked up so far, by artist and album: { status, cover }
@@ -121,9 +123,13 @@ function render() {
     if (appState.currentView === 'wrapped') {
         appState.eras = cachedEras();
         const years = appState.eras.eras.map(era => era.label);
-        if (appState.wrappedPeriod != 'all' && !years.includes(appState.wrappedPeriod)) {
+        if (appState.wrappedPeriod != 'all' && appState.wrappedPeriod != 'custom' && !years.includes(appState.wrappedPeriod)) {
             appState.wrappedPeriod = years.length > 0 ? years[years.length - 1] : 'all';
         }
+        // The custom range starts as every year, and any year that's gone (a new upload, say) goes back to the ends
+        if (!years.includes(appState.wrappedFrom)) appState.wrappedFrom = years[0] || null;
+        if (!years.includes(appState.wrappedTo)) appState.wrappedTo = years[years.length - 1] || null;
+        if (appState.wrappedPeriod == 'custom' && years.length == 0) appState.wrappedPeriod = 'all';
         // The stat cards follow the year picked here rather than the (hidden) date filter
         updateBentoStats(wrappedRows());
         holdHeight(viewport, () => {
@@ -448,6 +454,22 @@ function setupEventListeners() {
     });
 
     // Right-click (or the menu key, or a long press on Android) on a list row opens its menu
+    // The custom year range on the Wrapped tab. Picking a start after the end (or the other way round)
+    // moves the other one with it, so it's never back to front
+    viewport.addEventListener('change', (e) => {
+        if (e.target.id == 'wrapped-from') {
+            appState.wrappedFrom = e.target.value;
+            if (appState.wrappedTo < appState.wrappedFrom) appState.wrappedTo = appState.wrappedFrom;
+        } else if (e.target.id == 'wrapped-to') {
+            appState.wrappedTo = e.target.value;
+            if (appState.wrappedFrom > appState.wrappedTo) appState.wrappedFrom = appState.wrappedTo;
+        } else {
+            return;
+        }
+        render();
+        document.getElementById(e.target.id).focus(); // The tab's rebuilt, so put focus back where it was
+    });
+
     viewport.addEventListener('contextmenu', (e) => {
         const row = e.target.closest('.list-item');
         if (!row) return;
@@ -1137,11 +1159,15 @@ function eraValue(stats) {
 function erasHTML(result) {
     if (result.eras.length == 0) return `<p>No data found.</p>`;
 
+    // With a custom range, just the years in it
+    let eras = result.eras;
+    if (appState.wrappedPeriod == 'custom') eras = eras.filter(era => inWrappedRange(era.label));
+
     let html = `<h3 class="eras-title">Your eras</h3>
                 <p class="list-hint eras-hint">Your top artists year by year. Click a year to see its card.</p>
                 <div class="eras-grid">`;
     // Most recent first
-    for (const era of result.eras.slice().reverse()) {
+    for (const era of eras.slice().reverse()) {
         const selected = appState.wrappedPeriod == era.label;
         html += `<section class="era-card${selected ? ' selected' : ''}">
                     <h3><button type="button" class="era-year" data-year="${era.label}">${escapeHTML(era.label)}</button>${era.partial ? ' <span class="era-partial">(partial)</span>' : ''}</h3>
@@ -1162,7 +1188,22 @@ function erasHTML(result) {
 // The plays for the year that's picked, or everything
 function wrappedRows() {
     if (appState.wrappedPeriod == 'all') return appState.data;
+    if (appState.wrappedPeriod == 'custom') return appState.data.filter(song => inWrappedRange(song.localYear));
     return appState.data.filter(song => song.localYear == appState.wrappedPeriod);
+}
+
+// Years are always four digits, so comparing them as text puts them in the right order
+function inWrappedRange(year) {
+    return year >= appState.wrappedFrom && year <= appState.wrappedTo;
+}
+
+// What goes at the top of the card: "2026", "2020–2026" for all time, or the custom years
+function wrappedLabel() {
+    if (appState.wrappedPeriod == 'all') return rangeLabel();
+    if (appState.wrappedPeriod == 'custom') {
+        return appState.wrappedFrom == appState.wrappedTo ? appState.wrappedFrom : `${appState.wrappedFrom}–${appState.wrappedTo}`;
+    }
+    return appState.wrappedPeriod;
 }
 
 // All your years in a few characters, for the card: "2020–2026"
@@ -1190,7 +1231,7 @@ function currentCard() {
     const lookup = appState.shareCovers && artistAlbum ? appState.coverCache[coverKey(artists[0], artistAlbum)] : null;
 
     return {
-        label: appState.wrappedPeriod == 'all' ? rangeLabel() : appState.wrappedPeriod,
+        label: wrappedLabel(),
         artists: artists,
         songs: topSongs(rows).slice(0, 5).map(entry => entry[1].name),
         minutes: Math.round(totalTime(rows) / 60000),
@@ -1207,14 +1248,27 @@ function coverKey(artist, album) {
 function wrappedHTML() {
     const years = appState.eras.eras.map(era => era.label).reverse();
     let chips = '';
-    for (const year of years.concat('all')) {
-        chips += `<button type="button" class="year-chip" data-year="${year}" aria-pressed="${appState.wrappedPeriod == year}">${year == 'all' ? 'All time' : year}</button>`;
+    for (const year of years.concat('all', 'custom')) {
+        const text = { all: 'All time', custom: 'Custom range' }[year] || year;
+        chips += `<button type="button" class="year-chip" data-year="${year}" aria-pressed="${appState.wrappedPeriod == year}">${text}</button>`;
+    }
+    // From and to years, only once Custom range is picked
+    let range = '';
+    if (appState.wrappedPeriod == 'custom') {
+        const options = picked => years.slice().reverse().map(year =>
+            `<option value="${year}"${year == picked ? ' selected' : ''}>${year}</option>`).join('');
+        range = `<div class="wrapped-range">
+                    <select id="wrapped-from" aria-label="From year">${options(appState.wrappedFrom)}</select>
+                    to
+                    <select id="wrapped-to" aria-label="To year">${options(appState.wrappedTo)}</select>
+                 </div>`;
     }
     return `<div class="wrapped-top">
                 <canvas id="wrapped-canvas" class="card-preview" role="img" aria-label="Your Wrapped card"></canvas>
                 <div class="wrapped-side">
                     <h3>Your Wrapped</h3>
                     <div class="year-chips" role="group" aria-label="Year">${chips}</div>
+                    ${range}
                     <p id="photo-status" class="photo-status"></p>
                     <div class="wrapped-actions">
                         <button id="wrapped-share" type="button" class="hidden">Share</button>
