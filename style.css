@@ -296,7 +296,7 @@ a:hover {
     min-width: 200px;
 }
 
-#graph-search, #exclude-search {
+#graph-search, #list-search, #exclude-search {
     width: 100%;
     box-sizing: border-box;
     padding: 0.5rem;
@@ -320,7 +320,7 @@ a:hover {
 
 /* The graph's one hangs over the graph. The exclude window's one just pushes things down,
    because the window scrolls and would cut a hanging one off */
-#graph-suggestions {
+#graph-suggestions, #list-suggestions {
     position: absolute;
     top: 100%;
     left: 0;
@@ -376,7 +376,7 @@ a:hover {
     color: #888;
 }
 
-#graph-clear {
+#graph-clear, #list-filter-clear {
     background: transparent;
     border: 1px solid #333;
     color: #b3b3b3;
@@ -386,14 +386,15 @@ a:hover {
     font-weight: normal;
 }
 
-#graph-clear:hover {
+#graph-clear:hover, #list-filter-clear:hover {
     background: #333;
     color: #f3f3f3;
 }
 
-.graph-card {
-    /* Line colours. Checked for colourblind-safe neighbours and contrast on #282828, in this order,
-       so add new ones to the end rather than shuffling these. 6 is a bit low contrast, the table covers it */
+/* Line colours, used by the graph and the filter chips. Checked for colourblind-safe neighbours and
+   contrast on #282828, in this order, so add new ones to the end rather than shuffling these.
+   6 is a bit low contrast, the table covers it */
+:root {
     --series-everything: #1db954;
     --series-1: #3987e5;
     --series-2: #d95926;
@@ -403,7 +404,9 @@ a:hover {
     --series-6: #008300;
     --series-7: #9085e9;
     --series-8: #e66767;
+}
 
+.graph-card {
     background: #282828;
     padding: 1.5rem;
     border-radius: 8px;
@@ -1463,4 +1466,9 @@ dialog {
 .row-menu button:hover, .row-menu button:focus-visible {
     background: #333;
     outline: none;
+}
+
+/* The filter chips above the list */
+.list-chips {
+    margin: 0 0 0.75rem 0;
 }

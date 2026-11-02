@@ -384,7 +384,7 @@ function setupEventListeners() {
         } else if (e.target.id == 'graph-reset-zoom') {
             resetZoom();
         } else if (e.target.id == 'list-filter-clear') {
-            appState.graphSeries = []; // Clears the graph too, it's the same filter
+            appState.graphSeries = []; // Clears the graph too, they're the same filters
             render();
         } else if (e.target.id == 'graph-clear') {
             appState.graphSeries = [];
@@ -609,20 +609,33 @@ function listHeaderHTML() {
     for (const [value, text] of [['songs', 'Songs'], ['artists', 'Artists'], ['albums', 'Albums']]) {
         buttons += `<button type="button" class="sub-tab" data-list="${value}" aria-pressed="${appState.listView == value}">${text}</button>`;
     }
-    // Says when the list's only showing what's on the graph, with a way back to everything
-    let filter = '';
-    if (appState.graphSeries.length > 0) {
-        const names = appState.graphSeries.map(pick => `<strong>${escapeHTML(pick.label)}</strong>`).join(', ');
-        filter = `<div class="list-filter">
-                    <span>Only showing what's on the graph: ${names}</span>
-                    <button id="list-filter-clear" type="button" class="secondary-btn">Clear</button>
-                  </div>`;
+    // Filters: the same ones as the graph (adding one here puts it on the graph too, and the other way round),
+    // shown as chips in the graph's colours so it's clear which is which
+    const full = appState.graphSeries.length >= maxSeries;
+    let chips = '';
+    for (let i = 0; i < appState.graphSeries.length; i++) {
+        const pick = appState.graphSeries[i];
+        chips += `<li class="graph-chip">
+                    <span class="graph-key" style="background: var(--series-${pick.colour})"></span>
+                    <span>${escapeHTML(pick.label)}</span>
+                    <span class="graph-chip-detail">${typeNames[pick.type]}</span>
+                    <button type="button" class="graph-chip-remove" data-index="${i}" aria-label="Remove ${escapeHTML(pick.label)}">×</button>
+                  </li>`;
     }
     return `<div class="list-header">
                 <div class="sub-tabs" role="group" aria-label="Show">${buttons}</div>
                 <p class="list-hint">Click anything to see it on the graph, or right-click for more.</p>
             </div>
-            ${filter}`;
+            <div class="graph-controls">
+                <div class="graph-search-wrap">
+                    <input id="list-search" placeholder="${full ? "That's as many filters as there can be, remove one to add another" : 'Filter by an artist, album or song...'}"
+                           autocomplete="off"${full ? ' disabled' : ''} role="combobox" aria-label="Filter" aria-autocomplete="list"
+                           aria-expanded="false" aria-controls="list-suggestions">
+                    <ul id="list-suggestions" class="suggestions hidden" role="listbox"></ul>
+                </div>
+                ${appState.graphSeries.length > 0 ? '<button id="list-filter-clear" type="button" class="secondary-btn">Clear all</button>' : ''}
+            </div>
+            ${chips ? `<ul class="graph-legend list-chips">${chips}</ul>` : ''}`;
 }
 
 // 8. Custom Time Formatter
@@ -744,6 +757,16 @@ const searchBoxes = {
             render();
             // Straight back into the search box so you can add another
             const search = document.getElementById('graph-search');
+            if (search && !search.disabled) search.focus();
+        }
+    },
+    'list-search': {
+        list: 'list-suggestions',
+        skip: item => isPicked(item.type, item.key) || isExcluded(item.type, item.key),
+        pick: item => {
+            addPickByKey(item.type, item.key, item.label);
+            render();
+            const search = document.getElementById('list-search');
             if (search && !search.disabled) search.focus();
         }
     },
