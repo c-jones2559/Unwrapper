@@ -59,6 +59,7 @@ export function calculateStats(songs) {
     buildSearchIndex(songs);
     loadExclusions();
     applyExclusions();
+    loadPhotoSetting();
 
     document.getElementById('bento-grid').classList.remove('hidden');
     document.getElementById('controls').classList.remove('hidden');
@@ -325,6 +326,7 @@ function setupEventListeners() {
     }
     document.getElementById('share-photo').addEventListener('change', (e) => {
         appState.sharePhotos = e.target.checked;
+        savePhotoSetting();
         redrawCards();
     });
     document.getElementById('share-download').addEventListener('click', downloadShareImage);
@@ -963,8 +965,27 @@ function updatePhotoStatus(name) {
         if (lookup.status == 'looking') text = `Looking for a photo of ${name}...`;
         else if (lookup.status == 'none') text = `Couldn't find a photo of ${name}, so it's their name instead.`;
         else if (lookup.status == 'failed') text = `Couldn't look for a photo just now, so it's ${name}'s name instead.`;
+        else if (lookup.status == 'unusable') text = `The photo of ${name} couldn't be used, so it's their name instead.`;
     }
     status.textContent = text;
+}
+
+// Whether to look for photos is remembered, like exclusions, so turning it off sticks.
+// In try for the same reason: private browsing can make localStorage throw
+function loadPhotoSetting() {
+    try {
+        appState.sharePhotos = localStorage.getItem('unwrapper-photos') != 'off';
+    } catch (err) {
+        appState.sharePhotos = true;
+    }
+}
+
+function savePhotoSetting() {
+    try {
+        localStorage.setItem('unwrapper-photos', appState.sharePhotos ? 'on' : 'off');
+    } catch (err) {
+        // Can't save, it'll just be on again next time
+    }
 }
 
 function setWrappedPeriod(period) {
@@ -1019,12 +1040,23 @@ function makeShareFile() {
     blobTimer = setTimeout(() => {
         const canvas = document.getElementById('wrapped-canvas') || document.getElementById('share-canvas');
         if (!canvas) return;
-        canvas.toBlob(blob => {
-            if (!blob) return;
-            const name = `unwrapper-${currentCard().label.toLowerCase().replace(/[^a-z0-9]+/g, '-')}.png`;
-            shareFile = new File([blob], name, { type: 'image/png' });
-            updateShareButtons();
-        }, 'image/png');
+        try {
+            canvas.toBlob(blob => {
+                if (!blob) return;
+                const name = `unwrapper-${currentCard().label.toLowerCase().replace(/[^a-z0-9]+/g, '-')}.png`;
+                shareFile = new File([blob], name, { type: 'image/png' });
+                updateShareButtons();
+            }, 'image/png');
+        } catch (err) {
+            // A browser won't let a picture be saved if a photo on it came from somewhere that didn't allow it.
+            // Shouldn't happen with Wikimedia, but if it does, drop the photo rather than leave Download dead
+            console.error("Couldn't save the card with that photo on:", err);
+            const artist = currentCard().artists[0];
+            if (artist && appState.photoCache[artist]) {
+                appState.photoCache[artist] = { status: 'unusable' };
+                redrawCards();
+            }
+        }
     }, 150);
 }
 
