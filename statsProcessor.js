@@ -16,6 +16,8 @@ let appState = {
     // Each is { type, key, label, colour } with the same keys as topArtists/topAlbums/topSongs
     graphSeries: [],
     graphType: 'artist', // What the search box is searching for: 'artist', 'album' or 'song'
+    listType: 'song', // What's in the list on screen, and the keys in order, for clicking a row
+    listKeys: [],
     searchIndex: {}, // Everything you can search for, built once on load
     names: {} // How to spell each artist/song/album key, also built once on load
 };
@@ -82,6 +84,10 @@ function render() {
         listHTML = generateListHTML(sortedData);
     }
 
+    // Remember what's in the list so clicking a row knows what to put on the graph
+    appState.listType = { songs: 'song', artists: 'artist', albums: 'album' }[appState.currentView];
+    appState.listKeys = sortedData.map(entry => entry[0]);
+
     viewport.innerHTML = listHTML;
 }
 
@@ -143,6 +149,14 @@ function updateBentoStats(data) {
     document.getElementById('top-artist-display').innerText = artists.length > 0 ? artists[0][1].name : "-";
 }
 
+// Switches tab, same as clicking one of the tab buttons
+function setView(view) {
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b.dataset.tab == view));
+    appState.currentView = view;
+    appState.shown = 50;
+    render();
+}
+
 // 6. Setup Event Listeners
 // Only set them up once, otherwise pressing Process again doubles every click
 let listenersSet = false;
@@ -152,11 +166,7 @@ function setupEventListeners() {
 
     document.querySelectorAll('.tab-btn').forEach(btn => {
         btn.addEventListener('click', (e) => {
-            document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
-            e.target.classList.add('active');
-            appState.currentView = e.target.dataset.tab;
-            appState.shown = 50;
-            render();
+            setView(e.target.dataset.tab);
         });
     });
 
@@ -201,6 +211,8 @@ function setupEventListeners() {
             render();
         } else if (e.target.classList.contains('graph-chip-remove')) {
             removeGraphPick(Number(e.target.dataset.index));
+        } else if (e.target.closest('.list-item')) {
+            graphFromList(Number(e.target.closest('.list-item').dataset.index));
         }
     });
 
@@ -284,8 +296,9 @@ function setupYearOptions(data) {
 function generateListHTML(sortedData) {
     if (!sortedData.length) return `<p>No data found for this period.</p>`;
     
-    let html = `<ol class="stats-list">`;
-    
+    let html = `<p class="list-hint">Click anything to see it on the graph.</p>
+                <ol class="stats-list">`;
+
     for (let i = 0; i < appState.shown && i < sortedData.length; i++) {
         const stats = sortedData[i][1];
         const name = escapeHTML(stats.name);
@@ -302,11 +315,14 @@ function generateListHTML(sortedData) {
             headerContent += `<span style="color: #888; font-weight: normal;"> - ${escapeHTML(artist)}</span>`;
         }
 
+        // The whole row's a button so it can be clicked (or tabbed to) to put it on the graph
         html += `<li>
-                    ${headerContent}<br>
-                    <span style="color: #b3b3b3; font-size: 0.9em;">
-                        ${count.toLocaleString()} play${sOnEnd(count)} &bull; <em>${timeString}</em>
-                    </span>
+                    <button class="list-item" data-index="${i}" title="Show on the graph">
+                        ${headerContent}<br>
+                        <span style="color: #b3b3b3; font-size: 0.9em;">
+                            ${count.toLocaleString()} play${sOnEnd(count)} &bull; <em>${timeString}</em>
+                        </span>
+                    </button>
                  </li>`;
     }
     html += `</ol>`;
@@ -415,12 +431,18 @@ function freeColour() {
     return maxSeries;
 }
 
+// Adds a line to the graph, unless it's already on there or the graph's full. Says whether it did
+function addPickByKey(type, key, label) {
+    if (appState.graphSeries.length >= maxSeries || isPicked(type, key)) return false;
+    appState.graphSeries.push({ type: type, key: key, label: label, colour: freeColour() });
+    return true;
+}
+
+// From the search box, which only knows the label that was picked
 function addGraphPick(label) {
-    if (appState.graphSeries.length >= maxSeries) return;
     for (const item of appState.searchIndex[appState.graphType]) {
         if (item.label == label) {
-            if (isPicked(appState.graphType, item.key)) return;
-            appState.graphSeries.push({ type: appState.graphType, key: item.key, label: item.label, colour: freeColour() });
+            if (!addPickByKey(appState.graphType, item.key, item.label)) return;
             render();
             // Straight back into the search box so you can add another
             const search = document.getElementById('graph-search');
@@ -429,6 +451,20 @@ function addGraphPick(label) {
         }
     }
     // Not an exact match yet (still typing), so leave the graph as it is
+}
+
+// From clicking a row in one of the lists. Adds it to whatever's already on the graph and switches to it
+function graphFromList(index) {
+    const type = appState.listType;
+    const key = appState.listKeys[index];
+    const name = appState.names[type][key];
+    const label = type == 'artist' ? name.name : `${name.name} - ${name.artist}`;
+    addPickByKey(type, key, label);
+
+    // If you'd scrolled down the list, jump back up to where the graph starts
+    const graphTop = document.getElementById('bento-grid').getBoundingClientRect().bottom + window.scrollY;
+    setView('graph');
+    if (window.scrollY > graphTop) window.scrollTo({ top: graphTop });
 }
 
 function removeGraphPick(index) {

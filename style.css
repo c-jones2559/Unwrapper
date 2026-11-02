@@ -432,6 +432,43 @@ a:hover {
     border-bottom: 1px solid #333;
 }
 
+.list-hint {
+    max-width: none;
+    margin: 0 0 0.75rem 0;
+    text-align: center;
+    color: #888;
+    font-size: 0.9rem;
+}
+
+/* Each row in the lists is a button (to put it on the graph), but shouldn't look like one */
+.list-item {
+    display: block;
+    width: 100%;
+    text-align: left;
+    background: transparent;
+    color: inherit;
+    font: inherit;
+    font-weight: normal;
+    padding: 0;
+    margin: 0;
+    border-radius: 0;
+    cursor: pointer;
+}
+
+.list-item:hover {
+    background: transparent;
+}
+
+.list-item:hover strong {
+    color: #1db954;
+}
+
+.list-item:focus-visible {
+    outline: 2px solid #1db954;
+    outline-offset: 4px;
+    border-radius: 4px;
+}
+
 #show-more-btn {
     display: block;
     margin: -1rem auto 2rem auto; /* Tuck it under the list */
