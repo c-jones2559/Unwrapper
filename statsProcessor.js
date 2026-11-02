@@ -1,6 +1,6 @@
 import { msToHours, sOnEnd } from './timeBits.js?v=4';
 import { buildGraphData, drawGraph } from './graph.js?v=4';
-import { drawEraCard, themes } from './share.js?v=4';
+import { drawWrappedCard, themes, readableOn } from './share.js?v=4';
 
 // 1. The Global State
 let appState = {
@@ -22,8 +22,9 @@ let appState = {
     suggestBox: 'graph-search',
     activeSuggestion: -1,
     eras: null, // The eras on screen, kept for making the share image
-    shareCard: null, // What's on the share image, and its colours
-    shareTheme: { top: '#108239', bottom: '#06301a', text: '#ffffff' },
+    shareCard: null, // What's on the share image, which period it's for (-1 is everything), and its colours
+    sharePeriod: -1,
+    shareTheme: { ...themes[0] },
     excluded: [], // Anything left out of the stats, each { type, key, label }. Remembered between visits
     excludedKeys: { artist: {}, album: {}, song: {} },
     listType: 'song', // What's in the list on screen, and the keys in order, for clicking a row
@@ -294,13 +295,21 @@ function setupEventListeners() {
         setColourInputs();
         redrawShare();
     });
-    for (const [id, part] of [['colour-top', 'top'], ['colour-bottom', 'bottom'], ['colour-text', 'text']]) {
-        document.getElementById(id).addEventListener('input', (e) => {
-            appState.shareTheme = { ...appState.shareTheme, [part]: e.target.value };
-            buildSwatches(); // None of the presets will be lit up any more
+    for (const [id, part] of [['colour-base', 'base'], ['colour-accent', 'accent'], ['colour-ink', 'ink']]) {
+        document.getElementById(id).addEventListener('input', (e) => setOwnColour(part, e.target.value));
+    }
+    document.querySelectorAll('.pattern-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            appState.shareTheme = { ...appState.shareTheme, pattern: btn.dataset.pattern };
+            buildSwatches();
             redrawShare();
         });
-    }
+    });
+    document.getElementById('share-period').addEventListener('change', (e) => {
+        appState.sharePeriod = Number(e.target.value);
+        appState.shareCard = shareCardInfo(appState.sharePeriod);
+        redrawShare();
+    });
     document.getElementById('share-download').addEventListener('click', downloadShareImage);
     document.getElementById('share-native').addEventListener('click', shareShareImage);
     document.getElementById('share-close').addEventListener('click', () => {
@@ -309,6 +318,13 @@ function setupEventListeners() {
 
     // The exclude window
     document.getElementById('exclude-btn').addEventListener('click', openExcludeWindow);
+    document.getElementById('exclude-clear').addEventListener('click', () => {
+        // Asks first, since it's a saved list that might've taken a while to put together
+        if (appState.excluded.length > 0 && confirm(`Stop excluding all ${appState.excluded.length}?`)) {
+            appState.excluded = [];
+            exclusionsChanged();
+        }
+    });
     document.getElementById('exclude-done').addEventListener('click', () => {
         document.getElementById('exclude-dialog').close();
     });
@@ -773,6 +789,7 @@ function buildEras(data) {
             label: byMonth ? start.toLocaleDateString(undefined, { month: 'long', year: 'numeric' }) : String(year),
             shortLabel: byMonth ? start.toLocaleDateString(undefined, { month: 'short' }) : String(year),
             start: start.getTime(),
+            end: end.getTime(),
             top: top,
             partial: start.getTime() < from || end.getTime() > to // Only some of it's in the range, like this year so far
         });
@@ -793,7 +810,7 @@ function erasHTML(result) {
 
     let html = `<div class="eras-header">
                     <p class="list-hint">Your top artists ${result.unit == 'month' ? 'month by month' : 'year by year'}.</p>
-                    <button id="share-btn" type="button">Make a shareable image</button>
+                    <button id="share-btn" type="button">Share</button>
                 </div>
                 <div class="eras-grid">`;
     for (const era of result.eras) {
@@ -812,60 +829,67 @@ function erasHTML(result) {
     return html + `</div>`;
 }
 
-// 12. The shareable eras image (the drawing's in share.js)
-// What goes on the image, from whatever eras are on screen. Long histories only show the most recent ones
-function shareCardInfo() {
-    const result = appState.eras;
-    const maxRows = result.unit == 'month' ? 13 : 10;
-    let eras = result.eras;
-    let note = '';
-    if (eras.length > maxRows) {
-        eras = eras.slice(-maxRows);
-        note = `Showing the last ${maxRows} ${result.unit}s`;
-    }
-
-    const first = new Date(result.from);
-    const last = new Date(result.to - 1);
-    const sameYear = first.getFullYear() == last.getFullYear();
-
-    let title, range;
-    if (result.unit == 'year') {
-        title = 'My listening eras';
-        range = sameYear ? String(first.getFullYear()) : `${first.getFullYear()} – ${last.getFullYear()}`;
+// 12. The shareable image (the drawing's in share.js)
+// What goes on it, for either everything in the date filter (period -1) or one of the eras
+function shareCardInfo(period) {
+    let rows = filterDataByTime(appState.data);
+    let label;
+    if (period >= 0) {
+        const era = appState.eras.eras[period];
+        rows = rows.filter(song => song.playedAt >= era.start && song.playedAt < era.end);
+        label = era.label;
     } else {
-        title = sameYear ? `My ${first.getFullYear()}, month by month` : 'Month by month';
-        const monthYear = d => d.toLocaleDateString(undefined, { month: 'long', year: 'numeric' });
-        range = monthYear(first) == monthYear(last) ? monthYear(first) : `${monthYear(first)} – ${monthYear(last)}`;
+        label = rangeLabel();
     }
-
-    const hours = Math.round(totalTime(filterDataByTime(appState.data)) / (1000*60*60));
+    const topAlbum = topAlbums(rows)[0];
     return {
-        title: title,
-        range: range,
-        summary: `${hours.toLocaleString()} hour${sOnEnd(hours)} of music`,
-        // Months get their year added if the range goes over New Year, otherwise there'd be two Januaries
-        rows: eras.map(era => ({
-            label: result.unit == 'year' ? era.label
-                 : new Date(era.start).toLocaleDateString(undefined, sameYear ? { month: 'short' } : { month: 'short', year: '2-digit' }),
-            top: era.top.map(entry => entry[1].name)
-        })),
-        compact: result.unit == 'month',
-        note: note
+        label: label,
+        artists: topArtists(rows).slice(0, 5).map(entry => entry[1].name),
+        songs: topSongs(rows).slice(0, 5).map(entry => entry[1].name),
+        minutes: Math.round(totalTime(rows) / 60000),
+        topAlbum: topAlbum ? topAlbum[1].name : '-'
     };
+}
+
+// The whole date filter in a few characters, for running down the side: "2026", "2020–2026", "Mar 2024"
+function rangeLabel() {
+    const first = new Date(appState.eras.from);
+    const last = new Date(appState.eras.to - 1);
+    if (appState.eras.unit == 'year') {
+        return first.getFullYear() == last.getFullYear() ? String(first.getFullYear()) : `${first.getFullYear()}–${last.getFullYear()}`;
+    }
+    const monthYear = d => d.toLocaleDateString(undefined, { month: 'short', year: 'numeric' });
+    if (monthYear(first) == monthYear(last)) return monthYear(first);
+    return first.getFullYear() == last.getFullYear() ? String(first.getFullYear()) : `${first.getFullYear()}–${last.getFullYear()}`;
 }
 
 function openShareWindow() {
     if (!appState.eras || appState.eras.eras.length == 0) return;
-    appState.shareCard = shareCardInfo();
-    document.getElementById('share-range-note').textContent =
-        `This covers ${appState.shareCard.range}. To change that, close this and pick different dates with the date filter at the top.`;
+
+    // Everything in the date filter, or any one of the eras on their own
+    const select = document.getElementById('share-period');
+    select.innerHTML = '';
+    const everything = document.createElement('option');
+    everything.value = -1;
+    everything.textContent = `Everything (${rangeLabel()})`;
+    select.appendChild(everything);
+    for (let i = appState.eras.eras.length - 1; i >= 0; i--) {
+        const option = document.createElement('option');
+        option.value = i;
+        option.textContent = appState.eras.eras[i].label;
+        select.appendChild(option);
+    }
+    select.value = appState.sharePeriod < appState.eras.eras.length ? appState.sharePeriod : -1;
+    appState.sharePeriod = Number(select.value);
+
+    appState.shareCard = shareCardInfo(appState.sharePeriod);
     buildSwatches();
     setColourInputs();
     document.getElementById('share-dialog').showModal();
     redrawShare();
 }
 
-// The preset colour buttons
+// The preset colour buttons, each showing its card colour and accent
 function buildSwatches() {
     const holder = document.getElementById('theme-swatches');
     holder.innerHTML = '';
@@ -874,22 +898,33 @@ function buildSwatches() {
         swatch.type = 'button';
         swatch.className = 'theme-swatch';
         swatch.dataset.index = i;
-        swatch.style.background = `linear-gradient(135deg, ${themes[i].top}, ${themes[i].bottom})`;
+        swatch.style.background = `linear-gradient(135deg, ${themes[i].base} 50%, ${themes[i].accent} 50%)`;
         swatch.setAttribute('aria-label', themes[i].name);
         swatch.title = themes[i].name;
         swatch.setAttribute('aria-pressed', sameColours(themes[i], appState.shareTheme));
         holder.appendChild(swatch);
     }
+    document.querySelectorAll('.pattern-btn').forEach(btn => {
+        btn.setAttribute('aria-pressed', btn.dataset.pattern == appState.shareTheme.pattern);
+    });
 }
 
 function sameColours(a, b) {
-    return a.top == b.top && a.bottom == b.bottom && a.text == b.text;
+    return a.base == b.base && a.accent == b.accent && a.ink == b.ink;
 }
 
 function setColourInputs() {
-    document.getElementById('colour-top').value = appState.shareTheme.top;
-    document.getElementById('colour-bottom').value = appState.shareTheme.bottom;
-    document.getElementById('colour-text').value = appState.shareTheme.text;
+    document.getElementById('colour-base').value = appState.shareTheme.base;
+    document.getElementById('colour-accent').value = appState.shareTheme.accent;
+    document.getElementById('colour-ink').value = appState.shareTheme.ink;
+}
+
+// Picking your own colours. The small labels go grey to match whether the card's light or dark
+function setOwnColour(part, value) {
+    appState.shareTheme = { ...appState.shareTheme, name: 'Custom', [part]: value };
+    appState.shareTheme.muted = readableOn(appState.shareTheme.base) == '#121212' ? '#5c5a55' : '#b8b8b8';
+    buildSwatches(); // None of the presets will be lit up any more
+    redrawShare();
 }
 
 // Redraws the preview, then makes the PNG a moment later. It's made ahead of time because
@@ -898,14 +933,15 @@ let shareFile = null;
 let blobTimer = null;
 function redrawShare() {
     const canvas = document.getElementById('share-canvas');
-    drawEraCard(canvas, appState.shareCard, appState.shareTheme);
+    drawWrappedCard(canvas, appState.shareCard, appState.shareTheme);
     shareFile = null;
     updateShareButtons();
     clearTimeout(blobTimer);
     blobTimer = setTimeout(() => {
         canvas.toBlob(blob => {
             if (!blob) return;
-            shareFile = new File([blob], 'unwrapper-eras.png', { type: 'image/png' });
+            const name = `unwrapper-${appState.shareCard.label.toLowerCase().replace(/[^a-z0-9]+/g, '-')}.png`;
+            shareFile = new File([blob], name, { type: 'image/png' });
             updateShareButtons();
         }, 'image/png');
     }, 150);
@@ -933,7 +969,7 @@ function downloadShareImage() {
 
 function shareShareImage() {
     if (!shareFile) return;
-    navigator.share({ files: [shareFile], title: 'My listening eras', text: 'Made with unwrapper.cjones.cymru' })
+    navigator.share({ files: [shareFile], title: 'My Unwrapped', text: 'Made with unwrapper.cjones.cymru' })
         .catch(() => {}); // Closing the share menu counts as an error, which isn't worth mentioning
 }
 
@@ -1012,6 +1048,8 @@ function renderExcludeList() {
     const list = document.getElementById('exclude-list');
     if (!list) return;
     list.innerHTML = '';
+    const clear = document.getElementById('exclude-clear');
+    if (clear) clear.classList.toggle('hidden', appState.excluded.length == 0);
     if (appState.excluded.length == 0) {
         const none = document.createElement('li');
         none.className = 'exclude-none';

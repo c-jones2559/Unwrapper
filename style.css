@@ -1039,3 +1039,56 @@ dialog h3 {
         width: min(220px, 60vw);
     }
 }
+
+#share-period {
+    width: 100%;
+    padding: 0.5rem;
+    background: #181818;
+    color: #f3f3f3;
+    border: 1px solid #333;
+    border-radius: 4px;
+}
+
+.share-controls .dialog-help {
+    margin: 0.4rem 0 0 0;
+    font-size: 0.8rem;
+}
+
+.share-controls h4 label {
+    margin: 0;
+    max-width: none;
+    font-size: inherit;
+    color: inherit;
+}
+
+.pattern-btns {
+    display: inline-flex;
+    border: 1px solid #333;
+    border-radius: 20px;
+    overflow: hidden;
+}
+
+.pattern-btn {
+    background: transparent;
+    color: #b3b3b3;
+    padding: 0.4rem 0.9rem;
+    margin: 0;
+    border-radius: 0;
+    font-size: 0.85rem;
+    font-weight: normal;
+}
+
+.pattern-btn:hover {
+    background: #333;
+}
+
+.pattern-btn[aria-pressed="true"] {
+    background: #1db954;
+    color: #fff;
+    font-weight: bold;
+}
+
+/* Clear all sits on the left, Done on the right */
+#exclude-clear {
+    margin-right: auto;
+}

@@ -19,7 +19,7 @@ The video and podcast files are fine to include too, they just get left out of t
 - See your top songs, artists and albums for all time, a year, a month, or any dates you pick.
 - Sort by how many times you played something, or by how long you actually spent listening to it.
 - Graph your listening over time. Click anything in the lists, or search for it, to put it on the graph, and compare up to eight artists, albums or songs at once.
-- See your eras: your top artists for each year, or each month if you're looking at a single year. Then turn them into an image to share, in whatever colours you like.
+- See your eras: your top artists for each year, or each month if you're looking at a single year. Then make a Wrapped-style card to share, for everything or any single year, in whatever colours you like.
 - Exclude anything you don't want counted, like sleep sounds or someone else using your account. It's remembered for next time.
 
 ## How it counts

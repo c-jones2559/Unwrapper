@@ -1,26 +1,41 @@
-// Draws the shareable eras image, kept in here like the graph is in graph.js.
-// Always drawn at 1080x1920 (the size of a phone story), the preview's just shrunk down with CSS
+// Draws the shareable image, kept in here like the graph is in graph.js.
+// Laid out like a Wrapped summary card. Always drawn at 1080x1920 (the size of a phone story),
+// the preview's just shrunk down with CSS
 
 export const cardWidth = 1080;
 export const cardHeight = 1920;
 
-// Top and bottom of the background, and the text colour. Each one's checked so the
-// text is readable (4.5:1 or better) against both ends, which is why the green's a bit darker than the site's
+// base is the card, accent is the big year and the box at the top, ink is the text, muted is the
+// small labels. Each one's checked so all the text is readable (4.5:1 or better)
 export const themes = [
-    { name: 'Green', top: '#108239', bottom: '#06301a', text: '#ffffff' },
-    { name: 'Sunset', top: '#ff5f6d', bottom: '#ffc371', text: '#1a1a1a' },
-    { name: 'Ultraviolet', top: '#6a3df0', bottom: '#160b45', text: '#ffffff' },
-    { name: 'Ocean', top: '#0b74b8', bottom: '#041d36', text: '#ffffff' },
-    { name: 'Bubblegum', top: '#ff8fc6', bottom: '#ffe3f1', text: '#2b0a1e' },
-    { name: 'Midnight', top: '#2b2b2b', bottom: '#0b0b0b', text: '#f3f3f3' }
+    { name: 'Yellow', base: '#f1eee8', accent: '#f5c518', ink: '#121212', muted: '#5c5a55', pattern: 'checks' },
+    { name: 'Purple', base: '#232323', accent: '#a093ff', ink: '#ffffff', muted: '#b8b8b8', pattern: 'stripes' },
+    { name: 'Red', base: '#f1eee8', accent: '#ff4b33', ink: '#121212', muted: '#5c5a55', pattern: 'stripes' },
+    { name: 'Green', base: '#232323', accent: '#a6e22e', ink: '#ffffff', muted: '#b8b8b8', pattern: 'dots' },
+    { name: 'Pink', base: '#f1eee8', accent: '#ff7eb6', ink: '#121212', muted: '#5c5a55', pattern: 'dots' },
+    { name: 'Blue', base: '#232323', accent: '#4fa3ff', ink: '#ffffff', muted: '#b8b8b8', pattern: 'checks' }
 ];
 
-const margin = 80;
+export const patterns = ['checks', 'stripes', 'dots'];
 
-function circle(ctx, x, y, r) {
-    ctx.beginPath();
-    ctx.arc(x, y, r, 0, Math.PI * 2);
-    ctx.fill();
+const margin = 70;
+
+// How light a colour is, for working out whether black or white text goes on it
+function luminance(hex) {
+    const channels = [1, 3, 5].map(i => parseInt(hex.slice(i, i + 2), 16) / 255)
+        .map(v => v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4));
+    return 0.2126 * channels[0] + 0.7152 * channels[1] + 0.0722 * channels[2];
+}
+
+function contrast(a, b) {
+    const la = luminance(a), lb = luminance(b);
+    return (Math.max(la, lb) + 0.05) / (Math.min(la, lb) + 0.05);
+}
+
+// Black or white, whichever's easier to read on this colour. Used for the name in the coloured box,
+// so it works with any colour someone picks
+export function readableOn(colour) {
+    return contrast(colour, '#121212') >= contrast(colour, '#ffffff') ? '#121212' : '#ffffff';
 }
 
 // Shrinks the font until the text fits, and if it still doesn't at the smallest size, cuts it off with ...
@@ -40,129 +55,174 @@ function fitText(ctx, text, maxWidth, size, minSize, weight, family) {
     return cut.trimEnd() + '…';
 }
 
-// card is { title, range, summary, rows: [{ label, top: [names...] }], compact, note }
-// compact means lots of short rows (months): label and top artist side by side, no runners-up
-export function drawEraCard(canvas, card, theme) {
+// Splits text into lines that fit, a word at a time
+function breakLines(ctx, text, maxWidth) {
+    const words = text.split(/\s+/);
+    let lines = [];
+    let line = '';
+    for (const word of words) {
+        const attempt = line ? `${line} ${word}` : word;
+        if (line && ctx.measureText(attempt).width > maxWidth) {
+            lines.push(line);
+            line = word;
+        } else {
+            line = attempt;
+        }
+    }
+    if (line) lines.push(line);
+    return lines;
+}
+
+// Big text over a few lines: goes as big as it can while fitting in maxLines.
+// If it won't fit even at the smallest size, the last line gets cut off with ...
+function wrapText(ctx, text, maxWidth, maxLines, size, minSize, weight, family) {
+    for (let s = size; s >= minSize; s -= 4) {
+        ctx.font = `${weight} ${s}px ${family}`;
+        const lines = breakLines(ctx, text, maxWidth);
+        if (lines.length <= maxLines && lines.every(l => ctx.measureText(l).width <= maxWidth)) {
+            return { lines: lines, size: s };
+        }
+    }
+    ctx.font = `${weight} ${minSize}px ${family}`;
+    let lines = breakLines(ctx, text, maxWidth).slice(0, maxLines);
+    lines = lines.map(l => fitText(ctx, l, maxWidth, minSize, minSize, weight, family));
+    const last = lines.length - 1;
+    if (!lines[last].endsWith('…')) lines[last] = fitText(ctx, lines[last] + '…', maxWidth, minSize, minSize, weight, family);
+    return { lines: lines, size: minSize };
+}
+
+// The black and white pattern round the coloured box
+function drawPattern(ctx, kind, x, y, w, h, light, dark) {
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(x, y, w, h);
+    ctx.clip();
+    ctx.fillStyle = light;
+    ctx.fillRect(x, y, w, h);
+    ctx.fillStyle = dark;
+    const size = 70;
+    if (kind == 'checks') {
+        for (let row = 0; row * size < h; row++) {
+            for (let col = 0; col * size < w; col++) {
+                if ((row + col) % 2 == 0) ctx.fillRect(x + col * size, y + row * size, size, size);
+            }
+        }
+    } else if (kind == 'stripes') {
+        // Diagonal stripes: draw wide bars, then turn the whole lot 45 degrees
+        ctx.translate(x + w / 2, y + h / 2);
+        ctx.rotate(Math.PI / 4);
+        const reach = w + h;
+        for (let i = -reach; i < reach; i += size) {
+            ctx.fillRect(i, -reach, size / 2, reach * 2);
+        }
+    } else {
+        for (let row = 0; row * size < h + size; row++) {
+            for (let col = 0; col * size < w + size; col++) {
+                // Every other row's shifted half a gap, like Wrapped's dots
+                const offset = row % 2 == 0 ? 0 : size / 2;
+                ctx.beginPath();
+                ctx.arc(x + col * size + offset, y + row * size, size * 0.3, 0, Math.PI * 2);
+                ctx.fill();
+            }
+        }
+    }
+    ctx.restore();
+}
+
+// card is { label, artists: [5 names], songs: [5 names], minutes, topAlbum }
+// theme is one of the themes above (or someone's own colours in the same shape)
+export function drawWrappedCard(canvas, card, theme) {
     canvas.width = cardWidth;
     canvas.height = cardHeight;
     const ctx = canvas.getContext('2d');
     const family = getComputedStyle(document.body).fontFamily || 'sans-serif';
-    const textWidth = cardWidth - margin * 2;
-
-    // Background: a diagonal gradient with a few big see-through circles, a bit Wrapped
-    const bg = ctx.createLinearGradient(0, 0, cardWidth * 0.4, cardHeight);
-    bg.addColorStop(0, theme.top);
-    bg.addColorStop(1, theme.bottom);
-    ctx.fillStyle = bg;
-    ctx.fillRect(0, 0, cardWidth, cardHeight);
-
-    ctx.fillStyle = theme.text;
-    ctx.globalAlpha = 0.08;
-    circle(ctx, cardWidth * 0.95, cardHeight * 0.07, 340);
-    circle(ctx, cardWidth * 0.02, cardHeight * 0.88, 420);
-    ctx.globalAlpha = 0.05;
-    circle(ctx, cardWidth * 0.8, cardHeight * 0.6, 230);
-    ctx.globalAlpha = 1;
-
     ctx.textBaseline = 'alphabetic';
     ctx.textAlign = 'left';
 
-    // Header
-    let y = 170;
-    ctx.globalAlpha = 0.75;
+    ctx.fillStyle = theme.base;
+    ctx.fillRect(0, 0, cardWidth, cardHeight);
+
+    // The top: a pattern with a coloured box in it, and the year running down the left
+    const frame = { x: margin, y: margin, w: cardWidth - margin * 2, h: 940 };
+    drawPattern(ctx, theme.pattern, frame.x, frame.y, frame.w, frame.h, theme.base, theme.ink);
+
+    const box = { x: frame.x + 170, y: frame.y + 60, w: frame.w - 230, h: frame.h - 120 };
+    ctx.fillStyle = theme.accent;
+    ctx.fillRect(box.x, box.y, box.w, box.h);
+
+    // Inside the box: the number one artist, as big as it'll go
+    const boxText = readableOn(theme.accent);
+    const padding = 50;
+    ctx.fillStyle = boxText;
     ctx.font = `bold 34px ${family}`;
-    ctx.fillText('UNWRAPPER', margin, y);
-    ctx.globalAlpha = 1;
-
-    y += 120;
-    ctx.fillText(fitText(ctx, card.title, textWidth, 104, 64, 'bold', family), margin, y);
-
-    y += 80;
-    ctx.globalAlpha = 0.9;
-    ctx.fillText(fitText(ctx, card.range, textWidth, 52, 36, 'bold', family), margin, y);
-    y += 64;
-    ctx.globalAlpha = 0.8;
-    ctx.fillText(fitText(ctx, card.summary, textWidth, 42, 30, 'normal', family), margin, y);
-    ctx.globalAlpha = 1;
-
-    // The eras. Row height comes from how many there are, capped so a couple don't look silly and huge
-    const top = 560;
-    const bottom = card.note ? 1610 : 1660;
-    const rowH = Math.min(card.compact ? 120 : 230, (bottom - top) / card.rows.length);
-    let rowY = top;
-
-    for (let i = 0; i < card.rows.length; i++) {
-        const row = card.rows[i];
-
-        // Thin line between rows
-        if (i > 0) {
-            ctx.globalAlpha = 0.2;
-            ctx.fillRect(margin, rowY, textWidth, 2);
-            ctx.globalAlpha = 1;
-        }
-
-        if (card.compact) {
-            // "Jan   Hot Mulligan" on one line
-            const labelWidth = 190;
-            const size = Math.min(56, rowH * 0.42);
-            const baseline = rowY + rowH / 2 + size * 0.35;
-            ctx.globalAlpha = 0.7;
-            ctx.fillText(fitText(ctx, row.label, labelWidth - 20, size * 0.8, 20, 'bold', family), margin, baseline);
-            ctx.globalAlpha = 1;
-            ctx.fillText(fitText(ctx, row.top[0], textWidth - labelWidth, size, 22, 'bold', family), margin + labelWidth, baseline);
-        } else {
-            // Year, then the number one big, then the next two smaller underneath.
-            // With lots of years the rows get too short for that third line to be readable
-            // on a phone, so it's left off and the number one gets bigger instead
-            const showRest = rowH >= 140 && row.top.length > 1;
-            const labelSize = Math.min(44, rowH * (showRest ? 0.2 : 0.24));
-            const topSize = Math.min(78, rowH * (showRest ? 0.36 : 0.46));
-            const restSize = showRest ? Math.min(40, rowH * 0.19) : 0;
-            const gap = (rowH - labelSize - topSize - restSize) / (showRest ? 4 : 3);
-
-            let lineY = rowY + gap + labelSize;
-            ctx.globalAlpha = 0.7;
-            ctx.fillText(fitText(ctx, row.label, textWidth, labelSize, 20, 'bold', family), margin, lineY);
-            ctx.globalAlpha = 1;
-
-            lineY += gap + topSize;
-            ctx.fillText(fitText(ctx, row.top[0], textWidth, topSize, 28, 'bold', family), margin, lineY);
-
-            const rest = row.top.slice(1, 3);
-            if (showRest) {
-                lineY += gap + restSize;
-                ctx.globalAlpha = 0.85;
-                ctx.fillText(fitText(ctx, `then ${rest.join(' and ')}`, textWidth, restSize, 20, 'normal', family), margin, lineY);
-                ctx.globalAlpha = 1;
-            }
-        }
-        rowY += rowH;
+    ctx.fillText('MY TOP ARTIST', box.x + padding, box.y + padding + 30);
+    const name = wrapText(ctx, card.artists[0] || '-', box.w - padding * 2, 4, 170, 64, 'bold', family);
+    const lineHeight = name.size * 1.02;
+    let nameY = box.y + box.h - padding - lineHeight * (name.lines.length - 1);
+    for (const line of name.lines) {
+        ctx.fillText(line, box.x + padding, nameY);
+        nameY += lineHeight;
     }
 
-    // Says if some got left off, like someone with 15 years of data
-    if (card.note) {
-        ctx.globalAlpha = 0.7;
-        ctx.fillText(fitText(ctx, card.note, textWidth, 30, 22, 'normal', family), margin, 1650);
-        ctx.globalAlpha = 1;
+    // The year (or whatever the period is) sideways down the left, outlined so it stands off the pattern
+    ctx.save();
+    ctx.translate(frame.x + 140, frame.y + frame.h - 40);
+    ctx.rotate(-Math.PI / 2);
+    const label = fitText(ctx, card.label.toUpperCase(), frame.h - 80, 190, 80, 'bold', family);
+    ctx.lineJoin = 'round';
+    ctx.lineWidth = 14;
+    ctx.strokeStyle = theme.base;
+    ctx.strokeText(label, 0, 0);
+    ctx.fillStyle = theme.accent;
+    ctx.fillText(label, 0, 0);
+    ctx.restore();
+
+    // Top artists and top songs, side by side
+    const columnWidth = (cardWidth - margin * 2 - 40) / 2;
+    const columns = [
+        { title: 'Top Artists', items: card.artists, x: margin },
+        { title: 'Top Songs', items: card.songs, x: margin + columnWidth + 40 }
+    ];
+    for (const column of columns) {
+        let y = 1110;
+        ctx.fillStyle = theme.muted;
+        ctx.font = `normal 36px ${family}`;
+        ctx.fillText(column.title, column.x, y);
+        y += 70;
+        for (let i = 0; i < 5; i++) {
+            if (!column.items[i]) break;
+            ctx.fillStyle = theme.ink;
+            ctx.font = `bold 42px ${family}`;
+            ctx.fillText(String(i + 1), column.x, y);
+            // Every row the same size, long ones cut off with ... (like Wrapped) rather than shrunk
+            ctx.fillText(fitText(ctx, column.items[i], columnWidth - 44, 42, 42, 'bold', family), column.x + 44, y);
+            y += 66;
+        }
     }
 
-    // Footer: where to make your own, in a pill so it stands out
-    ctx.textAlign = 'center';
-    ctx.globalAlpha = 0.8;
-    ctx.font = `normal 34px ${family}`;
-    ctx.fillText('Make your own at', cardWidth / 2, 1740);
-    ctx.globalAlpha = 1;
+    // Minutes listened and top album
+    const statsY = 1560;
+    ctx.fillStyle = theme.muted;
+    ctx.font = `normal 36px ${family}`;
+    ctx.fillText('Minutes Listened', columns[0].x, statsY);
+    ctx.fillText('Top Album', columns[1].x, statsY);
+    ctx.fillStyle = theme.ink;
+    ctx.fillText(fitText(ctx, card.minutes.toLocaleString(), columnWidth, 110, 60, 'bold', family), columns[0].x, statsY + 120);
+    ctx.fillText(fitText(ctx, card.topAlbum || '-', columnWidth, 72, 36, 'bold', family), columns[1].x, statsY + 110);
 
-    const site = 'unwrapper.cjones.cymru';
-    ctx.font = `bold 46px ${family}`;
-    const pillWidth = ctx.measureText(site).width + 80;
-    const pillHeight = 90;
-    const pillX = (cardWidth - pillWidth) / 2;
-    const pillY = 1775;
+    // Footer: a little mark on the left, the site on the right
+    const footerY = 1830;
+    ctx.fillStyle = theme.ink;
     ctx.beginPath();
-    ctx.roundRect(pillX, pillY, pillWidth, pillHeight, pillHeight / 2);
+    ctx.arc(margin + 34, footerY - 14, 34, 0, Math.PI * 2);
     ctx.fill();
-    ctx.fillStyle = theme.bottom; // The site name's cut out of the pill in the background colour
-    ctx.fillText(site, cardWidth / 2, pillY + pillHeight / 2 + 16);
+    ctx.fillStyle = theme.base;
+    ctx.textAlign = 'center';
+    ctx.font = `bold 40px ${family}`;
+    ctx.fillText('U', margin + 34, footerY);
+    ctx.fillStyle = theme.ink;
+    ctx.textAlign = 'right';
+    ctx.font = `bold 40px ${family}`;
+    ctx.fillText('UNWRAPPER.CJONES.CYMRU', cardWidth - margin, footerY);
     ctx.textAlign = 'left';
 }
