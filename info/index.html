@@ -4,70 +4,78 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <link rel="stylesheet" href="../style.css">
-    <title>Unwrapper</title>
+    <title>Unwrapper - Info</title>
     <link rel="manifest" href="../manifest.json">
     <link rel="icon" href="../icons/icon-192.png" type="image/png">
 </head>
 <body>
     <h1>Unwrapper</h1>
-    <h2>Info and Help</h2>
+    <h2>Info and help</h2>
 
-    <p>You’re probably wondering, <em>"Why’s Chris sent me this?"</em> or <em>"Can't I just wait for Wrapped?"</em> Well the answer is <strong>No!</strong> Wrapped only shows you limited data and it disappears after a month. This tool shows you all your stats forever.</p>
-    
-    <h2>🧐 Why use this?</h2>
-    <p>Most "Stats for Spotify" sites use a limited API that only skims the surface, and can't access all your data.</p>
-    
-    <table style="width: max-content; margin: 0 auto;">
-      <thead>
-        <tr>
-          <th style="text-align: left;">Feature</th>
-          <th style="text-align: center;">Spotify Wrapped</th>
-          <th style="text-align: center;">Most Stats Sites</th>
-          <th style="text-align: center;">This Service</th>
-        </tr>
-      </thead>
-      <tbody>
-        <tr>
-          <td style="text-align: left;"><strong>Full History</strong></td>
-          <td style="text-align: center;">❌ (One year)</td>
-          <td style="text-align: center;">❌ (Limited)</td>
-          <td style="text-align: center;">✅ <strong>(All time)</strong></td>
-        </tr>
-        <tr>
-          <td style="text-align: left;"><strong>Persistent</strong></td>
-          <td style="text-align: center;">❌ (Lasts a month)</td>
-          <td style="text-align: center;">✅</td>
-          <td style="text-align: center;">✅</td>
-        </tr>
-        <tr>
-          <td style="text-align: left;"><strong>Raw Accuracy</strong></td>
-          <td style="text-align: center;">❌ (Curated)</td>
-          <td style="text-align: center;">⚠️ (Incomplete)</td>
-          <td style="text-align: center;">✅ <strong>(100% Raw Data)</strong></td>
-        </tr>
-        <tr>
-          <td style="text-align: left;"><strong>Privacy</strong></td>
-          <td style="text-align: center;">🔒 (Proprietary)</td>
-          <td style="text-align: center;">⚠️ (Server-side)</td>
-          <td style="text-align: center;">🛡️ <strong>(Local-only)</strong></td>
-        </tr>
-      </tbody>
-    </table>
+    <main class="info">
+        <p class="lead">You're probably wondering <em>"why's Chris sent me this?"</em>, or <em>"can't I just wait for Wrapped?"</em></p>
+        <p>You could, but Wrapped only covers one year, only shows you what Spotify picks out, and it's gone a month later.</p>
+        <p>Spotify will actually send you every song you've ever played if you ask for it. Unwrapper turns that into proper lists and graphs, for any stretch of time you like, from your whole history down to a single day.</p>
 
-    <h2>🛠️ How it works</h2>
-    <p>There’s one tiny catch: you’ve got to be a little bit patient. Spotify takes a few days to send your data over.</p>
+        <h2>Getting your data</h2>
+        <ol>
+            <li>Go to Spotify's <a href="https://www.spotify.com/us/account/privacy/">privacy settings</a>, tick <strong>Extended streaming history</strong> and request it. Not "Account data", that only goes back a year.</li>
+            <li>Confirm the email they send you, then wait. They say it can take up to 30 days, but it's usually a few.</li>
+            <li>When it turns up, unzip it, come back to the <a href="../">main page</a> and pick all the <code>Streaming_History_Audio</code> files at once (Ctrl+A in the file picker), then press Process.</li>
+        </ol>
+        <p>The video and podcast files are fine to include too, they just get left out of the music stats.</p>
 
-    <ol style="max-width: 600px; margin: 0 auto; text-align: left;">
-      <li><strong>Request your data:</strong> Head to <a href="https://www.spotify.com/us/account/privacy/">Spotify</a> and download your <strong>Extended Streaming History</strong>.</li>
-      <li><strong>Wait a little white:</strong> It says it can take up to 30 days, but it's usually much faster. It usually only takes a few days.</li>
-      <li><strong>Upload the files:</strong> Once you get that email, grab the <code>.json</code> files and upload them on the main site.</li>
-      <li><strong>Analyze:</strong> Explore your data to your heart's content!</li>
-    </ol>
+        <h2>What you can do with it</h2>
+        <ul>
+            <li>See your top songs, artists and albums for all time, a year, a month, or any dates you pick.</li>
+            <li>Sort by how many times you played something, or by how long you actually spent listening to it. The two lists are more different than you'd think.</li>
+            <li>Graph your listening over time. Click anything in the lists (or search for it) to put it on the graph, and compare up to eight artists, albums or songs at once.</li>
+        </ul>
 
-    <h2>🔒 Privacy</h2>
-    <p>I’m a computer scientist, not a data harvester.</p>
-    <p>All processing happens <strong>client-side</strong>. That means your data never leaves your machine. I never see it, the server never sees it, it’s just you and your stats.</p>
+        <h2>How it counts</h2>
+        <p>A play only counts if you listened for at least 30 seconds, which is the same rule Spotify uses. Anything shorter still adds to your listening time. Podcasts and audiobooks are left out, and Spotify's files overlap a bit, so any duplicates get removed.</p>
 
-    <h2><a href="https://unwrapper.cjones.cymru">Back to main site</a></h2>
+        <h2>Privacy</h2>
+        <p>I'm a computer scientist, not a data harvester.</p>
+        <p>Everything happens in your browser. Your files never get uploaded anywhere: I never see them and neither does the server. Close the tab and it's all gone.</p>
+
+        <h2>Moved off Spotify?</h2>
+        <p>If you've gone self-hosted with <a href="https://www.navidrome.org/">Navidrome</a> (0.59 or newer), it keeps its own record of every play, and you can export that in the same format. On your server, in Navidrome's data folder (the one with <code>navidrome.db</code> in it), run:</p>
+        <div class="code-block">
+            <button class="copy-btn" type="button">Copy</button>
+<pre id="navidrome-query">sqlite3 -readonly navidrome.db "
+SELECT json_group_array(json_object(
+  'ts', strftime('%Y-%m-%dT%H:%M:%SZ', s.submission_time, 'unixepoch'),
+  'ms_played', CAST(m.duration * 1000 AS INTEGER),
+  'platform', 'navidrome',
+  'master_metadata_track_name', m.title,
+  'master_metadata_album_artist_name', m.artist,
+  'master_metadata_album_album_name', m.album))
+FROM scrobbles s JOIN media_file m ON m.id = s.media_file_id;" &gt; navidrome_history.json</pre>
+        </div>
+        <p>Then upload <code>navidrome_history.json</code> here, on its own or along with your Spotify files. A few things to know:</p>
+        <ul>
+            <li>You'll need <code>sqlite3</code> installed on the server (<code>sudo apt install sqlite3</code> on Debian or Ubuntu).</li>
+            <li>Navidrome doesn't record how long you actually listened for, so every play counts as the whole song.</li>
+            <li>It exports everyone's plays, so if other people use your server, theirs will be in there too.</li>
+        </ul>
+
+        <p class="info-footer"><a href="../">Back to Unwrapper</a></p>
+    </main>
+
+    <script>
+        // Copies the Navidrome command. Clipboard needs https (or localhost), so fall back to selecting it
+        document.querySelector('.copy-btn').addEventListener('click', async (e) => {
+            const pre = document.getElementById('navidrome-query');
+            try {
+                await navigator.clipboard.writeText(pre.textContent);
+                e.target.textContent = 'Copied';
+            } catch (err) {
+                window.getSelection().selectAllChildren(pre);
+                e.target.textContent = 'Selected, press Ctrl+C';
+            }
+            setTimeout(() => e.target.textContent = 'Copy', 2000);
+        });
+    </script>
 </body>
 </html>

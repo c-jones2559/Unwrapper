@@ -1,3 +1,8 @@
+/* Tells the browser the site's dark, so scrollbars, date pickers and dropdown menus come out dark too */
+:root {
+    color-scheme: dark;
+}
+
 body {
     font-family: 'Segoe UI', Arial, sans-serif;
     background: #181818;
@@ -529,4 +534,87 @@ a:hover {
     .stats-list {
         padding: 1rem 1rem 1rem 2.5rem;
     }
+}
+
+/* --- INFO PAGE --- */
+
+.info {
+    display: block; /* main is a centred flex column everywhere else, which squashes text */
+    width: 90%;
+    max-width: 680px;
+    margin: 1rem auto 4rem auto;
+    line-height: 1.6;
+}
+
+.info h2 {
+    text-align: left;
+    color: #f3f3f3;
+    font-size: 1.3rem;
+    font-weight: bold;
+    margin: 2.5rem 0 0.5rem 0;
+}
+
+.info p {
+    max-width: none;
+    margin: 0.75rem 0;
+}
+
+.info .lead {
+    font-size: 1.15rem;
+    color: #f3f3f3;
+}
+
+.info ol, .info ul {
+    padding-left: 1.4rem;
+    color: #e0e0e0;
+}
+
+.info li {
+    margin: 0.6rem 0;
+}
+
+.info li::marker {
+    color: #1db954;
+    font-weight: bold;
+}
+
+.info code {
+    background: #282828;
+    padding: 0.1em 0.35em;
+    border-radius: 4px;
+    font-size: 0.9em;
+}
+
+.code-block {
+    position: relative;
+}
+
+.code-block pre {
+    background: #282828;
+    border: 1px solid #333;
+    border-radius: 8px;
+    padding: 2.75rem 1rem 1rem 1rem; /* Extra at the top so the Copy button doesn't sit on the command */
+    margin: 0;
+    overflow-x: auto; /* Long lines scroll inside the box rather than off the page */
+    font-size: 0.85rem;
+    line-height: 1.5;
+}
+
+.copy-btn {
+    position: absolute;
+    top: 0.5rem;
+    right: 0.5rem;
+    margin: 0;
+    padding: 0.3rem 0.8rem;
+    font-size: 0.8rem;
+    background: #333;
+}
+
+.copy-btn:hover {
+    background: #444;
+}
+
+.info-footer {
+    margin-top: 3rem !important;
+    text-align: center;
 }
