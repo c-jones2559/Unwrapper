@@ -41,21 +41,14 @@
     
     <nav id="controls" class="hidden">
         <div class="tabs">
-            <button class="tab-btn active" data-tab="songs">Songs</button>
-            <button class="tab-btn" data-tab="artists">Artists</button>
-            <button class="tab-btn" data-tab="albums">Albums</button>
+            <button class="tab-btn active" data-tab="list">List</button>
             <button class="tab-btn" data-tab="graph">Graph</button>
-            <button class="tab-btn" data-tab="eras">Eras</button>
+            <button class="tab-btn" data-tab="wrapped">Wrapped</button>
         </div>
     
         <div class="filters">
-            <!-- Opens the exclude window, says how many are excluded -->
-            <button id="exclude-btn" type="button">Exclude</button>
-            <!-- Sorts the lists and switches the graph between listens and hours -->
-            <div class="metric-toggle" role="group" aria-label="Rank by">
-                <button class="metric-btn active" data-metric="plays" aria-pressed="true">Plays</button>
-                <button class="metric-btn" data-metric="time" aria-pressed="false">Time</button>
-            </div>
+            <!-- The date filter. Hidden on Wrapped, which has its own year picker -->
+            <span id="date-filter" class="date-filter">
             <select id="time-range">
                 <option value="all">All Time</option>
             </select>
@@ -81,6 +74,29 @@
                 to
                 <input type="date" id="custom-to" aria-label="To">
             </span>
+            </span>
+
+            <!-- Settings: Plays/Time and Exclude. The dot shows when something's excluded -->
+            <button id="settings-btn" type="button" popovertarget="settings-menu" aria-label="Settings" title="Settings">
+                <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true">
+                    <circle cx="12" cy="12" r="5" fill="none" stroke="currentColor" stroke-width="2.5"/>
+                    <path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3M5.3 5.3l2.1 2.1M16.6 16.6l2.1 2.1M5.3 18.7l2.1-2.1M16.6 7.4l2.1-2.1"
+                          stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/>
+                </svg>
+                <span id="settings-dot" class="settings-dot hidden"></span>
+            </button>
+            <div id="settings-menu" class="settings-menu" popover>
+                <h4>Rank by</h4>
+                <!-- Sorts the lists and switches the graph between listens and hours -->
+                <div class="metric-toggle" role="group" aria-label="Rank by">
+                    <button class="metric-btn active" data-metric="plays" aria-pressed="true">Plays</button>
+                    <button class="metric-btn" data-metric="time" aria-pressed="false">Time</button>
+                </div>
+                <h4>Exclude</h4>
+                <p class="settings-help">Leave artists, albums or songs out of everything.</p>
+                <!-- Opens the exclude window, says how many are excluded -->
+                <button id="exclude-btn" type="button">Exclude</button>
+            </div>
         </div>
     </nav>
 

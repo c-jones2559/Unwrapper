@@ -1092,3 +1092,121 @@ dialog h3 {
 #exclude-clear {
     margin-right: auto;
 }
+
+/* --- SETTINGS AND THE LIST SWITCH --- */
+
+.date-filter {
+    display: inline-flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+#settings-btn {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 38px;
+    height: 38px;
+    padding: 0;
+    margin: 0;
+    background: transparent;
+    border: 1px solid #333;
+    border-radius: 50%;
+    color: #b3b3b3;
+}
+
+#settings-btn:hover {
+    background: #333;
+    color: #f3f3f3;
+}
+
+/* Something's excluded, so the stats aren't the whole picture */
+.settings-dot {
+    position: absolute;
+    top: 2px;
+    right: 2px;
+    width: 9px;
+    height: 9px;
+    border-radius: 50%;
+    background: #1db954;
+    border: 2px solid #181818;
+}
+
+/* Popovers open in the middle of the screen by default, the JS puts this one under the gear */
+.settings-menu {
+    position: fixed;
+    inset: auto;
+    margin: 0;
+    width: 240px;
+    padding: 1rem;
+    background: #282828;
+    color: #f3f3f3;
+    border: 1px solid #333;
+    border-radius: 10px;
+    box-shadow: 0 12px 32px rgba(0, 0, 0, 0.6);
+}
+
+.settings-menu h4 {
+    margin: 0 0 0.5rem 0;
+    font-size: 0.85rem;
+    color: #b3b3b3;
+    font-weight: normal;
+}
+
+.settings-menu h4:not(:first-child) {
+    margin-top: 1rem;
+}
+
+.settings-help {
+    margin: 0 0 0.6rem 0;
+    max-width: none;
+    font-size: 0.8rem;
+    line-height: 1.4;
+    color: #888;
+}
+
+.list-header {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    align-items: center;
+    gap: 0.75rem;
+    margin-bottom: 0.75rem;
+}
+
+.list-header .list-hint {
+    margin: 0;
+}
+
+.sub-tabs {
+    display: inline-flex;
+    border: 1px solid #333;
+    border-radius: 20px;
+    overflow: hidden;
+}
+
+.sub-tab {
+    background: transparent;
+    color: #b3b3b3;
+    padding: 0.45rem 1rem;
+    margin: 0;
+    border-radius: 0;
+    font-size: 0.9rem;
+    font-weight: normal;
+}
+
+.sub-tab:hover {
+    background: #333;
+}
+
+.sub-tab[aria-pressed="true"] {
+    background: #1db954;
+    color: #fff;
+    font-weight: bold;
+}
+
+.settings-menu #exclude-btn {
+    width: 100%;
+}

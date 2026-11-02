@@ -6,7 +6,8 @@ import { drawWrappedCard, themes, readableOn } from './share.js?v=4';
 let appState = {
     allData: [], // Every play from the files
     data: [], // The same minus anything excluded, which is what all the stats use
-    currentView: 'songs',
+    currentView: 'list', // 'list', 'graph' or 'wrapped'
+    listView: 'songs', // Which list's showing on the List tab: 'songs', 'artists' or 'albums'
     metric: 'plays', // 'plays' or 'time', what the lists are sorted by and what the graph shows
     timeFilter: 'all', // 'all', a year like '2026', or 'custom'
     monthFilter: 'all', // 'all' or 0-11, only used when a year is picked
@@ -76,8 +77,8 @@ function render() {
     // Update Header Stats
     updateBentoStats(filteredData);
 
-    if (appState.currentView === 'eras') {
-        appState.eras = buildEras(filteredData);
+    if (appState.currentView === 'wrapped') {
+        appState.eras = buildEras(appState.data);
         viewport.innerHTML = erasHTML(appState.eras);
         return;
     }
@@ -91,25 +92,20 @@ function render() {
     }
 
     // Generate List
-    let listHTML = "";
     let sortedData = [];
-
-    if (appState.currentView === 'songs') {
+    if (appState.listView === 'songs') {
         sortedData = topSongs(filteredData);
-        listHTML = generateListHTML(sortedData);
-    } else if (appState.currentView === 'artists') {
+    } else if (appState.listView === 'artists') {
         sortedData = topArtists(filteredData);
-        listHTML = generateListHTML(sortedData);
-    } else if (appState.currentView === 'albums') {
+    } else {
         sortedData = topAlbums(filteredData);
-        listHTML = generateListHTML(sortedData);
     }
 
     // Remember what's in the list so clicking a row knows what to put on the graph
-    appState.listType = { songs: 'song', artists: 'artist', albums: 'album' }[appState.currentView];
+    appState.listType = { songs: 'song', artists: 'artist', albums: 'album' }[appState.listView];
     appState.listKeys = sortedData.map(entry => entry[0]);
 
-    viewport.innerHTML = listHTML;
+    viewport.innerHTML = listHeaderHTML() + generateListHTML(sortedData);
 }
 
 // 4. Helper to Filter Data
@@ -182,6 +178,8 @@ function holdHeight(el, rebuild) {
 // Switches tab, same as clicking one of the tab buttons
 function setView(view) {
     document.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b.dataset.tab == view));
+    // Wrapped picks its own year, so the date filter would just be confusing there
+    document.getElementById('date-filter').classList.toggle('hidden', view == 'wrapped');
     appState.currentView = view;
     appState.shown = 50;
     render();
@@ -253,6 +251,10 @@ function setupEventListeners() {
             render();
         } else if (e.target.classList.contains('graph-chip-remove')) {
             removeGraphPick(Number(e.target.dataset.index));
+        } else if (e.target.closest('.sub-tab')) {
+            appState.listView = e.target.closest('.sub-tab').dataset.list;
+            appState.shown = 50;
+            render();
         } else if (e.target.closest('.list-item')) {
             graphFromList(Number(e.target.closest('.list-item').dataset.index));
         } else if (e.target.id == 'share-btn') {
@@ -317,7 +319,19 @@ function setupEventListeners() {
     });
 
     // The exclude window
-    document.getElementById('exclude-btn').addEventListener('click', openExcludeWindow);
+    document.getElementById('exclude-btn').addEventListener('click', () => {
+        document.getElementById('settings-menu').hidePopover();
+        openExcludeWindow();
+    });
+
+    // The settings menu opens in the middle of the screen by default, so put it under the gear instead
+    const settingsMenu = document.getElementById('settings-menu');
+    settingsMenu.addEventListener('toggle', (e) => {
+        if (e.newState != 'open') return;
+        const gear = document.getElementById('settings-btn').getBoundingClientRect();
+        settingsMenu.style.top = `${gear.bottom + 8}px`;
+        settingsMenu.style.left = `${Math.max(8, gear.right - settingsMenu.offsetWidth)}px`;
+    });
     document.getElementById('exclude-clear').addEventListener('click', () => {
         // Asks first, since it's a saved list that might've taken a while to put together
         if (appState.excluded.length > 0 && confirm(`Stop excluding all ${appState.excluded.length}?`)) {
@@ -390,8 +404,7 @@ function setupYearOptions(data) {
 function generateListHTML(sortedData) {
     if (!sortedData.length) return `<p>No data found for this period.</p>`;
     
-    let html = `<p class="list-hint">Click anything to see it on the graph.</p>
-                <ol class="stats-list">`;
+    let html = `<ol class="stats-list">`;
 
     for (let i = 0; i < appState.shown && i < sortedData.length; i++) {
         const stats = sortedData[i][1];
@@ -430,6 +443,18 @@ function generateListHTML(sortedData) {
         html += `<button id="show-more-btn">Show more</button>`;
     }
     return html;
+}
+
+// The Songs / Artists / Albums switch above the list
+function listHeaderHTML() {
+    let buttons = '';
+    for (const [value, text] of [['songs', 'Songs'], ['artists', 'Artists'], ['albums', 'Albums']]) {
+        buttons += `<button type="button" class="sub-tab" data-list="${value}" aria-pressed="${appState.listView == value}">${text}</button>`;
+    }
+    return `<div class="list-header">
+                <div class="sub-tabs" role="group" aria-label="Show">${buttons}</div>
+                <p class="list-hint">Click anything to see it on the graph.</p>
+            </div>`;
 }
 
 // 8. Custom Time Formatter
@@ -761,40 +786,34 @@ function suggestionKeys(e) {
 }
 
 // 11. Eras
-// Your top artists for each year, or each month if you're looking at about a year or less
+// Your top artists for each year, from all your data (the Wrapped tab has its own year picker,
+// so this doesn't follow the date filter)
 function buildEras(data) {
-    const bounds = getTimeBounds();
-    const from = Math.max(bounds.from == null ? -Infinity : bounds.from, appState.firstPlay);
-    const to = Math.min(bounds.to == null ? Infinity : bounds.to, appState.lastPlay + 1);
-    const byMonth = to - from <= 400 * 1000*60*60*24;
+    const from = appState.firstPlay;
+    const to = appState.lastPlay + 1;
 
-    // Sort the plays into years (or months). Keys like "2026" or "2026-03" sort in date order
     const groups = {};
     for (const song of data) {
         if (!song.master_metadata_track_name) continue;
-        const key = byMonth ? `${song.localYear}-${String(song.localMonth).padStart(2, '0')}` : song.localYear;
-        if (!groups[key]) groups[key] = [];
-        groups[key].push(song);
+        if (!groups[song.localYear]) groups[song.localYear] = [];
+        groups[song.localYear].push(song);
     }
 
     let eras = [];
-    for (const key of Object.keys(groups).sort()) {
-        const top = topArtists(groups[key]).slice(0, 5);
-        if (top.length == 0) continue; // Nothing but podcasts that month, so skip it
-        const year = Number(key.slice(0, 4));
-        const month = byMonth ? Number(key.slice(5)) : 0;
-        const start = new Date(year, month, 1);
-        const end = byMonth ? new Date(year, month + 1, 1) : new Date(year + 1, 0, 1);
+    for (const year of Object.keys(groups).sort()) {
+        const top = topArtists(groups[year]).slice(0, 5);
+        if (top.length == 0) continue; // Nothing but podcasts that year, so skip it
+        const start = new Date(Number(year), 0, 1);
+        const end = new Date(Number(year) + 1, 0, 1);
         eras.push({
-            label: byMonth ? start.toLocaleDateString(undefined, { month: 'long', year: 'numeric' }) : String(year),
-            shortLabel: byMonth ? start.toLocaleDateString(undefined, { month: 'short' }) : String(year),
+            label: year,
             start: start.getTime(),
             end: end.getTime(),
             top: top,
-            partial: start.getTime() < from || end.getTime() > to // Only some of it's in the range, like this year so far
+            partial: start.getTime() < from || end.getTime() > to // Only some of it's in your data, like this year so far
         });
     }
-    return { unit: byMonth ? 'month' : 'year', eras: eras, from: from, to: to };
+    return { unit: 'year', eras: eras, from: from, to: to };
 }
 
 function eraValue(stats) {
@@ -809,7 +828,7 @@ function erasHTML(result) {
     if (result.eras.length == 0) return `<p>No data found for this period.</p>`;
 
     let html = `<div class="eras-header">
-                    <p class="list-hint">Your top artists ${result.unit == 'month' ? 'month by month' : 'year by year'}.</p>
+                    <p class="list-hint">Your top artists year by year.</p>
                     <button id="share-btn" type="button">Share</button>
                 </div>
                 <div class="eras-grid">`;
@@ -1042,6 +1061,8 @@ function updateExcludeButton() {
     const count = appState.excluded.length;
     button.textContent = count > 0 ? `Excluded (${count})` : 'Exclude';
     button.classList.toggle('has-exclusions', count > 0);
+    const dot = document.getElementById('settings-dot');
+    if (dot) dot.classList.toggle('hidden', count == 0);
 }
 
 function renderExcludeList() {
