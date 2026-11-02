@@ -1,5 +1,5 @@
-import { msToHours, sOnEnd } from './timeBits.js';
-import { buildGraphData, drawGraph } from './graph.js';
+import { msToHours, sOnEnd } from './timeBits.js?v=2';
+import { buildGraphData, drawGraph } from './graph.js?v=2';
 
 // 1. The Global State
 let appState = {
