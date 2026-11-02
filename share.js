@@ -234,16 +234,19 @@ export function drawCard(canvas, card, theme) {
     circle(ctx, cardWidth * 0.8, cardHeight * 0.6, 230);
     ctx.globalAlpha = 1;
 
-    // Header: the year big on the left, UNWRAPPER small on the right, sat on the same line
+    // Header: the year big on the left, UNWRAPPER small on the right, lined up with the top of the year
     const headerY = 200;
+    ctx.font = `bold 34px ${family}`;
+    const brand = ctx.measureText('UNWRAPPER');
+    const label = fitText(ctx, card.label, textWidth - brand.width - 40, 130, 64, 'bold', family);
+    const labelTop = headerY - ctx.measureText(label).actualBoundingBoxAscent;
+    ctx.fillText(label, margin, headerY);
     ctx.globalAlpha = 0.75;
     ctx.font = `bold 34px ${family}`;
     ctx.textAlign = 'right';
-    ctx.fillText('UNWRAPPER', cardWidth - margin, headerY);
-    const brandWidth = ctx.measureText('UNWRAPPER').width;
+    ctx.fillText('UNWRAPPER', cardWidth - margin, labelTop + brand.actualBoundingBoxAscent);
     ctx.textAlign = 'left';
     ctx.globalAlpha = 1;
-    ctx.fillText(fitText(ctx, card.label, textWidth - brandWidth - 40, 130, 64, 'bold', family), margin, headerY);
 
     // Work out the layout before drawing the rest: two-line songs take more room, so if it's all
     // too tall, try a shorter picture box, then smaller list text, until it fits above the footer
