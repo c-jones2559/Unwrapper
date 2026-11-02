@@ -57,6 +57,7 @@ export function calculateStats(songs) {
         song.localMonth = date.getMonth();
         song.playedAt = date.getTime();
     }
+    capNavidromePlays(songs);
     appState.allData = songs;
     buildNameKeys(songs);
     buildSearchIndex(songs);
@@ -71,6 +72,18 @@ export function calculateStats(songs) {
     setupEventListeners();
     render();
     announce('Done, your stats are below.');
+}
+
+// Navidrome doesn't say how long you listened, so the export counts every play as the whole song.
+// It counts a play about halfway through though, so skipping later still gets the full length.
+// A play can't have lasted longer than it was until the next one, so cut it off there. Never below
+// 30 seconds, since Navidrome had already decided it was a play, and the last one's left as it is
+function capNavidromePlays(songs) {
+    const plays = songs.filter(song => song.platform == 'navidrome').sort((a, b) => a.playedAt - b.playedAt);
+    for (let i = 0; i < plays.length - 1; i++) {
+        const gap = plays[i + 1].playedAt - plays[i].playedAt;
+        plays[i].ms_played = Math.min(plays[i].ms_played, Math.max(gap, minPlayMs));
+    }
 }
 
 // After an upload that didn't work. Without this the stats from the last upload stay on screen,
@@ -879,17 +892,17 @@ function buildSearchIndex(songs) {
     appState.searchIndex = { artist: [], album: [], song: [] };
     for (const [key, stats] of topArtists(songs)) {
         appState.searchIndex.artist.push({ type: 'artist', key: key, label: stats.name, name: stats.name, artist: '',
-                                           search: stats.name.toLowerCase() });
+                                           search: nameKey(stats.name) });
     }
     for (const [key, stats] of topAlbums(songs)) {
         const label = `${stats.name} - ${stats.artist}`;
         appState.searchIndex.album.push({ type: 'album', key: key, label: label, name: stats.name, artist: stats.artist,
-                                          search: label.toLowerCase() });
+                                          search: nameKey(label) });
     }
     for (const [key, stats] of topSongs(songs)) {
         const label = `${stats.name} - ${stats.artist}`;
         appState.searchIndex.song.push({ type: 'song', key: key, label: label, name: stats.name, artist: stats.artist,
-                                         search: label.toLowerCase() });
+                                         search: nameKey(label) });
     }
 }
 
@@ -898,7 +911,7 @@ function buildSearchIndex(songs) {
 // the order is: names that start with what you typed, then artists, albums, songs, then most played.
 // skip says what to leave out (already on the graph, already excluded, etc)
 function findSuggestions(text, skip = searchBoxes['graph-search'].skip) {
-    const search = text.trim().toLowerCase();
+    const search = nameKey(text.trim());
     const types = ['artist', 'album', 'song'];
 
     // Nothing typed yet, so just show a few of the most played of each
@@ -927,7 +940,7 @@ function findSuggestions(text, skip = searchBoxes['graph-search'].skip) {
             const item = index[i];
             if (!words.every(word => item.search.includes(word))) continue;
             if (skip(item)) continue;
-            const startsWith = item.name.toLowerCase().startsWith(search);
+            const startsWith = nameKey(item.name).startsWith(search);
             if (startsWith && starts < 10) {
                 candidates.push({ item: item, score: t, rank: i });
                 starts++;
@@ -1423,7 +1436,9 @@ function loadExclusions() {
     try {
         const saved = JSON.parse(localStorage.getItem(excludedStorageKey) || '[]');
         if (Array.isArray(saved)) {
-            appState.excluded = saved.filter(ex => ex && typeNames[ex.type] && typeof ex.key == 'string' && typeof ex.label == 'string');
+            appState.excluded = saved.filter(ex => ex && typeNames[ex.type] && typeof ex.key == 'string' && typeof ex.label == 'string')
+                                     // Saved before keys ignored curly apostrophes, so fold them the same way or they'd stop matching
+                                     .map(ex => ({ ...ex, key: nameKey(ex.key) }));
         }
     } catch (err) {
         appState.excluded = [];
@@ -1505,8 +1520,17 @@ function totalTime(songs) {
     }, 0);
 }
 
-// Spotify and Navidrome don't always agree on capitals ("Bring Me The Horizon" vs "Bring Me the Horizon"),
-// so everything's grouped by a lowercase key. They're worked out once on load rather than every render,
+// The key a name gets grouped (and searched) by. Lowercase, and curly apostrophes and the various
+// dashes all made plain, since Spotify and Navidrome write "I Don’t Need Anyone" and "I Don't Need Anyone"
+function nameKey(text) {
+    return text.toLowerCase()
+        .replace(/[‘’‛ʼ`´]/g, "'")
+        .replace(/[“”‟]/g, '"')
+        .replace(/[‐‑‒–—―−]/g, '-');
+}
+
+// Spotify and Navidrome don't always agree on capitals ("Bring Me The Horizon" vs "Bring Me the Horizon")
+// or punctuation, so everything's grouped by nameKey. They're worked out once on load rather than every render,
 // and each key shows whichever spelling turns up most across all the data, so names don't change with the filter
 function buildNameKeys(songs) {
     const spellings = { artist: {}, song: {}, album: {} };
@@ -1515,17 +1539,17 @@ function buildNameKeys(songs) {
         const track = song.master_metadata_track_name;
         const album = song.master_metadata_album_album_name;
         if (artist) {
-            song.artistKey = artist.toLowerCase();
+            song.artistKey = nameKey(artist);
             countSpelling(spellings.artist, song.artistKey, artist, { name: artist });
         }
         if (track) {
             // Key on artist too, otherwise every song called "Intro" gets lumped together
-            song.songKey = `${artist}\n${track}`.toLowerCase();
+            song.songKey = nameKey(`${artist}\n${track}`);
             countSpelling(spellings.song, song.songKey, `${artist}\n${track}`, { name: track, artist: artist });
         }
         if (album) {
             // Same as songs, loads of artists have an album called "Greatest Hits"
-            song.albumKey = `${artist}\n${album}`.toLowerCase();
+            song.albumKey = nameKey(`${artist}\n${album}`);
             countSpelling(spellings.album, song.albumKey, `${artist}\n${album}`, { name: album, artist: artist });
         }
     }

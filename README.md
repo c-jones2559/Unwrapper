@@ -18,14 +18,14 @@ The video and podcast files are fine to include too, they just get left out of t
 
 - See your top songs, artists and albums for all time, a year, a month, or any dates you pick.
 - Sort by how many times you played something, or by how long you actually spent listening to it (in the settings, behind the gear).
-- Graph your listening over time. Click anything in the lists, or search for it, to put it on the graph, and compare up to eight artists, albums or songs at once. Click a month or drag across a stretch to zoom in (right-click to zoom back out), The lists follow the same dates, and you can filter both by artist, album or song from either one, so you can see exactly what you were playing.
+- Graph your listening over time. Click anything in the lists, or search for it, to put it on the graph, and compare up to eight artists, albums or songs at once. Click a month or drag across a stretch to zoom in (right-click to zoom back out). The lists follow the same dates, and you can filter both by artist, album or song from either one, so you can see exactly what you were playing.
 - Right-click anything in the lists to see it on the graph, find it on Spotify, or exclude it.
 - Make your own Wrapped for any year, or all time: your top artists, songs and album and how many minutes you listened, on a card to share, in whatever colours you like. Your eras are underneath, your top artists year by year.
 - Exclude anything you don't want counted, like sleep sounds or someone else using your account (also in the settings). It's remembered for next time.
 
 ## How it counts
 
-A play only counts if you listened for at least 30 seconds, which is the same rule Spotify uses. Anything shorter still adds to your listening time. Podcasts and audiobooks are left out, Spotify's files overlap a bit so duplicates get removed, and names are grouped ignoring capitals, so "Bring Me The Horizon" and "Bring Me the Horizon" count as the same band.
+A play only counts if you listened for at least 30 seconds, which is the same rule Spotify uses. Anything shorter still adds to your listening time. Podcasts and audiobooks are left out, Spotify's files overlap a bit so duplicates get removed, and names are grouped ignoring capitals and apostrophes, so "Bring Me The Horizon" and "Bring Me the Horizon" count as the same band.
 
 ## Privacy
 
@@ -46,10 +46,11 @@ SELECT json_group_array(json_object(
   'master_metadata_track_name', m.title,
   'master_metadata_album_artist_name', m.artist,
   'master_metadata_album_album_name', m.album))
-FROM scrobbles s JOIN media_file m ON m.id = s.media_file_id;" > navidrome_history.json
+FROM scrobbles s JOIN media_file m ON m.id = s.media_file_id
+WHERE s.user_id = (SELECT id FROM user WHERE user_name = 'YOUR_USERNAME');" > navidrome_history.json
 ```
 
-Then upload `navidrome_history.json`, on its own or along with your Spotify files. You'll need `sqlite3` installed on the server. Navidrome doesn't record how long you actually listened for, so every play counts as the whole song, and it exports everyone's plays if other people use your server.
+Then upload `navidrome_history.json`, on its own or along with your Spotify files. Change `YOUR_USERNAME` to the name you log in to Navidrome with, so you only get your own plays. You'll need `sqlite3` installed on the server. Navidrome doesn't record how long you actually listened for, only that you got at least halfway, so each play counts as the whole song or the time until the next play, whichever's shorter.
 
 ## Running it yourself
 
