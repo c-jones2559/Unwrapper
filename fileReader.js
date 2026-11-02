@@ -1,4 +1,4 @@
-import { calculateStats, clearStats, announce } from './statsProcessor.js?v=16';
+import { calculateStats, clearStats, announce, autoStartGenres } from './statsProcessor.js?v=16';
 
 // 1. Helper function to promise-ify the FileReader (makes life way easier)
 const readJsonFile = (file) => {
@@ -102,6 +102,8 @@ function checkValid (songs) {
     }
     stats.innerHTML = "(Valid file, processing...)";
     calculateStats(unique);
+    // Genres get looked up in the background straight away (unless they've been stopped before)
+    autoStartGenres();
     return;
 }
 

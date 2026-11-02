@@ -1038,6 +1038,45 @@ dialog h3 {
     outline-offset: 2px;
 }
 
+/* Grey placeholder cards while the Fun tab's being worked out, gently pulsing */
+.fun-skeleton {
+    display: flex;
+    flex-direction: column;
+    gap: 0.6rem;
+    min-height: 180px;
+}
+
+.skeleton-line {
+    display: block;
+    height: 0.8rem;
+    width: 100%;
+    border-radius: 4px;
+    background: #333;
+    animation: skeleton-pulse 1.2s ease-in-out infinite alternate;
+}
+
+.skeleton-line.short {
+    width: 40%;
+}
+
+.skeleton-line.big {
+    height: 2rem;
+    width: 60%;
+    margin-bottom: 0.3rem;
+}
+
+@keyframes skeleton-pulse {
+    from { opacity: 1; }
+    to { opacity: 0.45; }
+}
+
+/* Still for anyone who's asked for less motion */
+@media (prefers-reduced-motion: reduce) {
+    .skeleton-line {
+        animation: none;
+    }
+}
+
 /* The Look up genres button, under its explanation */
 .fun-action {
     display: block;

@@ -34,7 +34,7 @@ I'm a computer scientist, not a data harvester. Everything happens in your brows
 
 The one exception is album covers on the Wrapped card. For each year you look at on the Wrapped tab, it looks for the cover of that year's top artist's top album, so the artist and album names get looked up on Apple's iTunes search. Nothing else gets sent, and you can turn it off under Customise, which it remembers.
 
-Genres on the Fun tab are the other one. Your files don't say what genre anything is, so if you press Look up genres, the names of your top 100 artists get looked up on [MusicBrainz](https://musicbrainz.org/). That only happens if you ask, and the answers are kept in your browser so it's only done once.
+Genres on the Fun tab are the other one. Your files don't say what genre anything is, so once your files are processed, the names of your top 100 artists get looked up on [MusicBrainz](https://musicbrainz.org/). You can stop it with the Stop button on the Fun tab, which it remembers, and the answers are kept in your browser so it's only done once.
 
 ## Moved off Spotify?
 
