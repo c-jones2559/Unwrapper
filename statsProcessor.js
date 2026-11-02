@@ -1,4 +1,5 @@
 import { msToHours, sOnEnd } from './timeBits.js';
+import { buildGraphData, drawGraph } from './graph.js';
 
 // 1. The Global State
 let appState = {
@@ -8,7 +9,14 @@ let appState = {
     monthFilter: 'all', // 'all' or 0-11, only used when a year is picked
     customFrom: '', // "YYYY-MM-DD" from the date inputs
     customTo: '',
-    shown: 50 // How many rows of the list to show, goes up by 50 with each Show more
+    shown: 50, // How many rows of the list to show, goes up by 50 with each Show more
+    firstPlay: 0, // ms, so the graph knows where the data starts and ends
+    lastPlay: 0,
+    // Graph only: narrow it down to one artist/album/song
+    graphType: 'all', // 'all', 'artist', 'album' or 'song'
+    graphKey: null, // Same keys as topArtists/topAlbums/topSongs
+    graphLabel: '',
+    searchIndex: {} // Everything you can search for, built once on load
 };
 
 // 2. The Initializer
@@ -22,6 +30,7 @@ export function calculateStats(songs) {
         song.playedAt = date.getTime();
     }
     appState.allData = songs;
+    buildSearchIndex(songs);
 
     document.getElementById('bento-grid').classList.remove('hidden');
     document.getElementById('controls').classList.remove('hidden');
@@ -40,6 +49,12 @@ function render() {
     
     // Update Header Stats
     updateBentoStats(filteredData);
+
+    if (appState.currentView === 'graph') {
+        viewport.innerHTML = graphControlsHTML();
+        showGraph(filteredData);
+        return;
+    }
 
     // Generate List
     let listHTML = "";
@@ -168,11 +183,46 @@ function setupEventListeners() {
     });
 
     // The button gets rebuilt every render, so listen on the viewport instead of the button itself
-    document.getElementById('content-viewport').addEventListener('click', (e) => {
+    const viewport = document.getElementById('content-viewport');
+    viewport.addEventListener('click', (e) => {
         if (e.target.id == 'show-more-btn') {
             appState.shown += 50;
             render();
         }
+    });
+
+    // Same idea for the graph's artist/album/song filter
+    viewport.addEventListener('change', (e) => {
+        if (e.target.id == 'graph-type') {
+            appState.graphType = e.target.value;
+            appState.graphKey = null;
+            appState.graphLabel = '';
+            render();
+        } else if (e.target.id == 'graph-search') {
+            pickGraphFilter(e.target.value);
+        }
+    });
+    viewport.addEventListener('input', (e) => {
+        if (e.target.id == 'graph-search') {
+            // Clicking a suggestion comes through as an input event, not a change one (in Chrome anyway)
+            if (e.inputType == 'insertReplacementText' || !(e instanceof InputEvent)) {
+                pickGraphFilter(e.target.value);
+            } else {
+                fillSuggestions(e.target.value);
+            }
+        }
+    });
+
+    // The graph is sized to fit, so redraw it when the window gets wider or narrower.
+    // Only the width matters, and only the graph gets redrawn, not the search box: a phone
+    // keyboard opening changes the height, and rebuilding the box would close the keyboard
+    let resizeTimer = null;
+    let lastWidth = window.innerWidth;
+    window.addEventListener('resize', () => {
+        if (appState.currentView != 'graph' || window.innerWidth == lastWidth) return;
+        lastWidth = window.innerWidth;
+        clearTimeout(resizeTimer);
+        resizeTimer = setTimeout(() => showGraph(filterDataByTime(appState.allData)), 150);
     });
 }
 
@@ -203,6 +253,8 @@ function setupYearOptions(data) {
         if (item.playedAt < first) first = item.playedAt;
         if (item.playedAt > last) last = item.playedAt;
     }
+    appState.firstPlay = first;
+    appState.lastPlay = last;
     if (data.length > 0) {
         appState.customFrom = msToDateInput(first);
         appState.customTo = msToDateInput(last);
@@ -270,6 +322,111 @@ function escapeHTML(text) {
         .replaceAll(">", "&gt;")
         .replaceAll('"', "&quot;")
         .replaceAll("'", "&#39;");
+}
+
+// 10. Graph view
+function graphControlsHTML() {
+    const types = [['all', 'Everything'], ['artist', 'Artist'], ['album', 'Album'], ['song', 'Song']];
+    let options = '';
+    for (const [value, text] of types) {
+        options += `<option value="${value}"${appState.graphType == value ? ' selected' : ''}>${text}</option>`;
+    }
+
+    let search = '';
+    if (appState.graphType != 'all') {
+        search = `<input id="graph-search" list="graph-suggestions" placeholder="Search for a${appState.graphType == 'album' ? 'n' : ''} ${appState.graphType}..."
+                    value="${escapeHTML(appState.graphLabel)}" autocomplete="off">
+                  <datalist id="graph-suggestions"></datalist>`;
+    }
+
+    return `<div class="graph-controls">
+                <select id="graph-type" aria-label="Show listens for">${options}</select>
+                ${search}
+            </div>
+            <div id="graph-area" class="graph-card"></div>`;
+}
+
+function showGraph(data) {
+    // Only bother with the filter if something's actually been picked
+    let rows = data;
+    if (appState.graphType != 'all' && appState.graphKey != null) {
+        rows = data.filter(matchesGraphFilter);
+    }
+
+    // Use the picked time range, but don't go past the first or last play
+    const bounds = getTimeBounds();
+    const from = Math.max(bounds.from == null ? -Infinity : bounds.from, appState.firstPlay);
+    const to = Math.min(bounds.to == null ? Infinity : bounds.to, appState.lastPlay + 1);
+
+    const heading = appState.graphKey != null ? appState.graphLabel : 'everything';
+    const area = document.getElementById('graph-area');
+    if (from >= to) {
+        area.textContent = 'No listens in this period.';
+        return;
+    }
+    drawGraph(area, buildGraphData(rows, from, to), heading);
+
+    if (appState.graphType != 'all') {
+        fillSuggestions(appState.graphLabel);
+    }
+}
+
+function matchesGraphFilter(song) {
+    const artist = song.master_metadata_album_artist_name;
+    if (appState.graphType == 'artist') return artist == appState.graphKey;
+    if (appState.graphType == 'album') return `${artist}\n${song.master_metadata_album_album_name}` == appState.graphKey;
+    return `${artist}\n${song.master_metadata_track_name}` == appState.graphKey;
+}
+
+// Everything you can search for, most played first so the suggestions are useful
+function buildSearchIndex(songs) {
+    appState.searchIndex = { artist: [], album: [], song: [] };
+    for (const [key, stats] of topArtists(songs)) {
+        appState.searchIndex.artist.push({ key: key, label: stats.name });
+    }
+    for (const [key, stats] of topAlbums(songs)) {
+        appState.searchIndex.album.push({ key: key, label: `${stats.name} - ${stats.artist}` });
+    }
+    for (const [key, stats] of topSongs(songs)) {
+        appState.searchIndex.song.push({ key: key, label: `${stats.name} - ${stats.artist}` });
+    }
+}
+
+// Only puts the top 30 matches in, a datalist with 14,000 songs in it grinds to a halt
+function fillSuggestions(text) {
+    const list = document.getElementById('graph-suggestions');
+    if (!list) return;
+    const search = text.toLowerCase();
+    list.innerHTML = '';
+
+    let count = 0;
+    for (const item of appState.searchIndex[appState.graphType]) {
+        if (item.label.toLowerCase().includes(search)) {
+            const option = document.createElement('option');
+            option.value = item.label;
+            list.appendChild(option);
+            count++;
+            if (count == 30) break;
+        }
+    }
+}
+
+function pickGraphFilter(label) {
+    if (label == '') {
+        appState.graphKey = null;
+        appState.graphLabel = '';
+        render();
+        return;
+    }
+    for (const item of appState.searchIndex[appState.graphType]) {
+        if (item.label == label) {
+            appState.graphKey = item.key;
+            appState.graphLabel = item.label;
+            render();
+            return;
+        }
+    }
+    // Not an exact match yet (still typing), so leave the graph as it is
 }
 
 // --- DATA PROCESSORS (Updated to capture Artist name) ---

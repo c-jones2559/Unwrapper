@@ -209,6 +209,142 @@ a:hover {
     margin: 0 auto;
 }
 
+/* --- GRAPH --- */
+
+.graph-controls {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    margin-bottom: 1rem;
+}
+
+#graph-type, #graph-search {
+    padding: 0.5rem;
+    background: #282828;
+    color: #f3f3f3;
+    border: 1px solid #333;
+    border-radius: 4px;
+}
+
+#graph-search {
+    flex: 1;
+    min-width: 200px;
+}
+
+.graph-card {
+    background: #282828;
+    padding: 1.5rem;
+    border-radius: 8px;
+    margin-bottom: 2rem;
+}
+
+.graph-title {
+    margin: 0;
+    font-size: 1rem;
+    color: #f3f3f3;
+}
+
+.graph-subtitle {
+    margin: 0.25rem 0 1rem 0;
+    font-size: 0.9rem;
+    color: #b3b3b3;
+}
+
+.graph-plot {
+    position: relative; /* So the tooltip can sit over the graph */
+}
+
+.graph-svg {
+    display: block;
+    outline: none;
+}
+
+.graph-svg:focus-visible {
+    outline: 2px solid #1db954;
+    outline-offset: 4px;
+    border-radius: 4px;
+}
+
+.graph-grid {
+    stroke: #3a3a3a;
+    stroke-width: 1;
+}
+
+.graph-axis {
+    fill: #b3b3b3;
+    font-size: 12px;
+    font-variant-numeric: tabular-nums;
+}
+
+.graph-area {
+    fill: #1db954;
+    fill-opacity: 0.1;
+}
+
+.graph-line {
+    fill: none;
+    stroke: #1db954;
+    stroke-width: 2;
+    stroke-linejoin: round;
+    stroke-linecap: round;
+}
+
+.graph-crosshair {
+    stroke: #888;
+    stroke-width: 1;
+}
+
+.graph-dot {
+    fill: #1db954;
+    stroke: #282828; /* Ring in the card colour so it stands off the line */
+    stroke-width: 2;
+}
+
+.graph-tooltip {
+    position: absolute;
+    pointer-events: none;
+    background: #181818;
+    border: 1px solid #333;
+    border-radius: 4px;
+    padding: 0.5rem 0.75rem;
+    white-space: nowrap;
+    display: flex;
+    flex-direction: column;
+    gap: 0.2rem;
+}
+
+.graph-tooltip strong {
+    color: #f3f3f3;
+}
+
+.graph-tooltip span {
+    color: #b3b3b3;
+    font-size: 0.85rem;
+}
+
+.graph-card details {
+    margin-top: 1rem;
+    color: #b3b3b3;
+}
+
+.graph-card summary {
+    cursor: pointer;
+}
+
+.graph-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 0.5rem;
+    font-size: 0.9rem;
+    font-variant-numeric: tabular-nums;
+}
+
+.graph-table th, .graph-table td {
+    text-align: left;
+    padding: 0.3rem 0.5rem;
+    border-bottom: 1px solid #333;
+}
+
 #show-more-btn {
     display: block;
     margin: -1rem auto 2rem auto; /* Tuck it under the list */
