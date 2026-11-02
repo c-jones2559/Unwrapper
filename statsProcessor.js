@@ -65,8 +65,10 @@ function render() {
     updateBentoStats(filteredData);
 
     if (appState.currentView === 'graph') {
-        viewport.innerHTML = graphControlsHTML();
-        showGraph(filteredData);
+        holdHeight(viewport, () => {
+            viewport.innerHTML = graphControlsHTML();
+            showGraph(filteredData);
+        });
         return;
     }
 
@@ -148,6 +150,15 @@ function updateBentoStats(data) {
 
     document.getElementById('top-song-display').innerText = songs.length > 0 ? songs[0][1].name : "-";
     document.getElementById('top-artist-display').innerText = artists.length > 0 ? artists[0][1].name : "-";
+}
+
+// The graph is empty for a moment while it's rebuilt, and measuring its width makes the browser
+// lay the page out right then. The page is shorter for that moment, so the browser scrolls you
+// up to fit, and doesn't scroll back once the graph's there. Holding the height stops it shrinking
+function holdHeight(el, rebuild) {
+    el.style.minHeight = `${el.offsetHeight}px`;
+    rebuild();
+    el.style.minHeight = '';
 }
 
 // Switches tab, same as clicking one of the tab buttons
@@ -259,7 +270,9 @@ function setupEventListeners() {
         if (appState.currentView != 'graph' || window.innerWidth == lastWidth) return;
         lastWidth = window.innerWidth;
         clearTimeout(resizeTimer);
-        resizeTimer = setTimeout(() => showGraph(filterDataByTime(appState.allData)), 150);
+        resizeTimer = setTimeout(() => {
+            holdHeight(viewport, () => showGraph(filterDataByTime(appState.allData)));
+        }, 150);
     });
 }
 
