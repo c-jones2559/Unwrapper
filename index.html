@@ -40,20 +40,20 @@
     </section>
     
     <nav id="controls" class="hidden">
-        <div class="tabs">
-            <button class="tab-btn active" data-tab="list">List</button>
-            <button class="tab-btn" data-tab="graph">Graph</button>
-            <button class="tab-btn" data-tab="wrapped">Wrapped</button>
+        <div class="tabs" role="group" aria-label="View">
+            <button class="tab-btn active" data-tab="list" aria-pressed="true">List</button>
+            <button class="tab-btn" data-tab="graph" aria-pressed="false">Graph</button>
+            <button class="tab-btn" data-tab="wrapped" aria-pressed="false">Wrapped</button>
         </div>
     
         <div class="filters">
             <!-- The date filter. Hidden on Wrapped, which has its own year picker -->
             <span id="date-filter" class="date-filter">
-            <select id="time-range">
+            <select id="time-range" aria-label="Time period">
                 <option value="all">All Time</option>
             </select>
             <!-- Only shows once a year is picked -->
-            <select id="month-range" class="hidden">
+            <select id="month-range" class="hidden" aria-label="Month">
                 <option value="all">All months</option>
                 <option value="0">January</option>
                 <option value="1">February</option>

@@ -75,7 +75,7 @@ input[type="file"] {
 
 button {
     background: #1db954;
-    color: #fff;
+    color: #121212; /* Near-black on the green, white on it is too faint to read easily */
     border: none;
     border-radius: 4px;
     padding: 0.7rem 1.5rem;
@@ -104,8 +104,8 @@ button:hover {
     height: 1em;
     margin-right: 0.5em;
     vertical-align: -0.15em;
-    border: 2px solid rgba(255, 255, 255, 0.35);
-    border-top-color: #fff;
+    border: 2px solid rgba(0, 0, 0, 0.25);
+    border-top-color: currentColor;
     border-radius: 50%;
     animation: spin 0.8s linear infinite;
 }
@@ -216,7 +216,7 @@ a:hover {
 
 .tab-btn.active {
     background: #1db954;
-    color: white;
+    color: #121212;
 }
 
 /* Plays / Time switch */
@@ -243,7 +243,7 @@ a:hover {
 
 .metric-btn.active {
     background: #1db954;
-    color: #fff;
+    color: #121212;
     font-weight: bold;
 }
 
@@ -758,6 +758,7 @@ a:hover {
 }
 
 .copy-btn {
+    color: #f3f3f3;
     position: absolute;
     top: 0.5rem;
     right: 0.5rem;
@@ -1220,7 +1221,7 @@ dialog h3 {
 
 .sub-tab[aria-pressed="true"] {
     background: #1db954;
-    color: #fff;
+    color: #121212;
     font-weight: bold;
 }
 
@@ -1282,7 +1283,7 @@ dialog h3 {
 .year-chip[aria-pressed="true"] {
     background: #1db954;
     border-color: #1db954;
-    color: #fff;
+    color: #121212;
     font-weight: bold;
 }
 

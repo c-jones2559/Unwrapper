@@ -324,7 +324,10 @@ function rowMenuAction(action) {
 
 // Switches tab, same as clicking one of the tab buttons
 function setView(view) {
-    document.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b.dataset.tab == view));
+    document.querySelectorAll('.tab-btn').forEach(b => {
+        b.classList.toggle('active', b.dataset.tab == view);
+        b.setAttribute('aria-pressed', b.dataset.tab == view); // So screen readers can tell which one's on
+    });
     // Wrapped picks its own year, so the date filter would just be confusing there
     document.getElementById('date-filter').classList.toggle('hidden', view == 'wrapped');
     appState.currentView = view;
@@ -1252,7 +1255,11 @@ function updateCoverStatus(card) {
         else if (lookup.status == 'unusable') text = `The cover of ${card.artistAlbum} couldn't be used, so it's ${card.artists[0]}'s name instead.`;
     }
     status.textContent = text;
+    // The status line gets rebuilt with the tab, so screen readers are told separately, and only when it changes
+    if (text && text != lastCoverStatus) announce(text);
+    lastCoverStatus = text;
 }
+let lastCoverStatus = '';
 
 // Whether to look for covers is remembered, like exclusions, so turning it off sticks.
 // In try for the same reason: private browsing can make localStorage throw
