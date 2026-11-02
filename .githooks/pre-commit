@@ -1,0 +1,3 @@
+#!/usr/bin/env bash
+# Stamps ?v= with a hash of the staged CSS/JS, so it changes exactly when they do (see scripts/stamp-version.sh)
+exec scripts/stamp-version.sh --staged > /dev/null

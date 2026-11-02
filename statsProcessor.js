@@ -1,6 +1,6 @@
-import { sOnEnd } from './timeBits.js?v=16';
-import { buildGraphData, drawGraph } from './graph.js?v=16';
-import { drawCard, themes, findAlbumCover } from './share.js?v=16';
+import { sOnEnd } from './timeBits.js?v=b19063d6';
+import { buildGraphData, drawGraph } from './graph.js?v=b19063d6';
+import { drawCard, themes, findAlbumCover } from './share.js?v=b19063d6';
 
 // 1. The Global State
 let appState = {

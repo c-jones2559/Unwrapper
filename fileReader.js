@@ -1,4 +1,4 @@
-import { calculateStats, clearStats, announce, autoStartGenres } from './statsProcessor.js?v=16';
+import { calculateStats, clearStats, announce, autoStartGenres } from './statsProcessor.js?v=b19063d6';
 
 // 1. Helper function to promise-ify the FileReader (makes life way easier)
 const readJsonFile = (file) => {
