@@ -1,28 +1,59 @@
-# 🎵 Spotify, Unwrapped
+# Unwrapper
 
-You’re probably wondering, *"Why’s Chris sent me this?"* or *"Can't I just wait for Wrapped?"* Well the answer is **No!** Wrapped only shows you limited data and it disappears after a month. This tool shows you all your stats forever.
+You're probably wondering *"why's Chris sent me this?"*, or *"can't I just wait for Wrapped?"*
 
-## 🧐 Why use this?
-Most "Stats for Spotify" sites use a limited API that only skims the surface, and can't access all your data.
+You could, but Wrapped only covers one year, only shows you what Spotify picks out, and it's gone a month later. Spotify will actually send you every song you've ever played if you ask for it. Unwrapper turns that into proper lists and graphs, for any stretch of time you like, from your whole history down to a single day.
 
-| Feature | Spotify Wrapped | Most Stats Sites | This Service |
-| :--- | :---: | :---: | :---: |
-| **Full History** | ❌ (One year) | ❌ (Limited) | ✅ **(All time)** |
-| **Persistent** | ❌ (Lasts a month) | ✅ | ✅ |
-| **Raw Accuracy** | ❌ (Curated) | ⚠️ (Incomplete) | ✅ **(100% Raw Data)** |
-| **Privacy** | 🔒 (Proprietary) | ⚠️ (Server-side) | 🛡️ **(Local-only)** |
+Try it at **[unwrapper.cjones.cymru](https://unwrapper.cjones.cymru)**.
 
-## 🛠️ How it works
-There’s one tiny catch: you’ve got to be a little bit patient. Spotify takes a few days to send your data over.
+## Getting your data
 
-1.  **Request Your Data:** Head to [Spotify](https://www.spotify.com/us/account/privacy/) and download your **Extended Streaming History**.
-2.  **The Waiting Game:** It says it can take up to 30 days, but it's usually much faster. It usually only takes a few days.
-3.  **Drop the Files:** Once you get that email, grab the `.json` files and upload them on the main site.
-4.  **Analyze:** Explore your data to your heart's content!
+1. Go to Spotify's [privacy settings](https://www.spotify.com/us/account/privacy/), tick **Extended streaming history** and request it. Not "Account data", that only goes back a year.
+2. Confirm the email they send you, then wait. They say it can take up to 30 days, but it's usually a few.
+3. When it turns up, unzip it, open the site and pick all the `Streaming_History_Audio` files at once, then press Process.
 
-## 🔒 Privacy
-I’m a computer scientist, not a data harvester. 
+The video and podcast files are fine to include too, they just get left out of the music stats.
 
-All processing happens **client-side**. That means your data never leaves your machine. I never see it, the server never sees it, it’s just you and your stats.
+## What you can do with it
 
-Check it out at **[unwrapper.cjones.cymru](https://unwrapper.cjones.cymru)**.
+- See your top songs, artists and albums for all time, a year, a month, or any dates you pick.
+- Sort by how many times you played something, or by how long you actually spent listening to it.
+- Graph your listening over time. Click anything in the lists, or search for it, to put it on the graph, and compare up to eight artists, albums or songs at once.
+
+## How it counts
+
+A play only counts if you listened for at least 30 seconds, which is the same rule Spotify uses. Anything shorter still adds to your listening time. Podcasts and audiobooks are left out, Spotify's files overlap a bit so duplicates get removed, and names are grouped ignoring capitals, so "Bring Me The Horizon" and "Bring Me the Horizon" count as the same band.
+
+## Privacy
+
+I'm a computer scientist, not a data harvester. Everything happens in your browser: your files never get uploaded anywhere, I never see them and neither does the server.
+
+## Moved off Spotify?
+
+If you've gone self-hosted with [Navidrome](https://www.navidrome.org/) (0.59 or newer), it keeps its own record of every play, and you can export that in the same format. On your server, in Navidrome's data folder (the one with `navidrome.db` in it), run:
+
+```bash
+sqlite3 -readonly navidrome.db "
+SELECT json_group_array(json_object(
+  'ts', strftime('%Y-%m-%dT%H:%M:%SZ', s.submission_time, 'unixepoch'),
+  'ms_played', CAST(m.duration * 1000 AS INTEGER),
+  'platform', 'navidrome',
+  'master_metadata_track_name', m.title,
+  'master_metadata_album_artist_name', m.artist,
+  'master_metadata_album_album_name', m.album))
+FROM scrobbles s JOIN media_file m ON m.id = s.media_file_id;" > navidrome_history.json
+```
+
+Then upload `navidrome_history.json`, on its own or along with your Spotify files. You'll need `sqlite3` installed on the server. Navidrome doesn't record how long you actually listened for, so every play counts as the whole song, and it exports everyone's plays if other people use your server.
+
+## Running it yourself
+
+It's plain HTML, CSS and JavaScript with no build step and no dependencies. The JavaScript uses modules, which browsers won't load straight from a file, so serve the folder instead:
+
+```bash
+python3 -m http.server 8000
+```
+
+and open `http://localhost:8000`.
+
+If you change any CSS or JS, bump the `?v=` number everywhere it appears (`grep -rn "?v=" --include='*.html' --include='*.js' .`). Otherwise browsers that already have the old files cached can end up mixing old and new ones.
