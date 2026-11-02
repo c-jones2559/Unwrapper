@@ -1,4 +1,4 @@
-import { calculateStats, clearStats, announce } from './statsProcessor.js?v=6';
+import { calculateStats, clearStats, announce } from './statsProcessor.js?v=7';
 
 // 1. Helper function to promise-ify the FileReader (makes life way easier)
 const readJsonFile = (file) => {
@@ -71,6 +71,13 @@ document.getElementById('processBtn').addEventListener('click', async () => {
         button.disabled = false;
         button.textContent = "Process";
     }
+});
+
+// Once there are stats the upload area's just a Change files button, which brings it back
+document.getElementById('change-files').addEventListener('click', (e) => {
+    document.getElementById('upload').classList.remove('hidden');
+    e.target.classList.add('hidden');
+    document.getElementById('input').focus();
 });
 
 function checkValid (songs) {

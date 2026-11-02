@@ -1,6 +1,6 @@
-import { sOnEnd } from './timeBits.js?v=6';
-import { buildGraphData, drawGraph } from './graph.js?v=6';
-import { drawCard, themes, findAlbumCover } from './share.js?v=6';
+import { sOnEnd } from './timeBits.js?v=7';
+import { buildGraphData, drawGraph } from './graph.js?v=7';
+import { drawCard, themes, findAlbumCover } from './share.js?v=7';
 
 // 1. The Global State
 let appState = {
@@ -64,9 +64,13 @@ export function calculateStats(songs) {
     loadExclusions();
     applyExclusions();
     loadCoverSetting();
+    loadTheme();
 
     document.getElementById('bento-grid').classList.remove('hidden');
     document.getElementById('controls').classList.remove('hidden');
+    // The upload area's done its job, so it shrinks to a button and the stats move up the page
+    document.getElementById('upload').classList.add('hidden');
+    document.getElementById('change-files').classList.remove('hidden');
 
     setupYearOptions(songs);
     setupEventListeners();
@@ -96,6 +100,8 @@ export function clearStats() {
     erasCache = null;
     document.getElementById('bento-grid').classList.add('hidden');
     document.getElementById('controls').classList.add('hidden');
+    document.getElementById('upload').classList.remove('hidden');
+    document.getElementById('change-files').classList.add('hidden');
 }
 
 // Says something to screen readers (processing, errors, looking for a cover) without showing it.
@@ -124,6 +130,13 @@ function render() {
             viewport.innerHTML = wrappedHTML();
             redrawCards();
         });
+        return;
+    }
+
+    // A custom range that ends before it starts has nothing in it, which looks like a bug unless it says why
+    if (appState.timeFilter == 'custom' && appState.customFrom && appState.customTo && appState.customFrom > appState.customTo) {
+        updateBentoStats([]);
+        viewport.innerHTML = `<p>The start date's after the end date, so there's nothing in between. Swap them round.</p>`;
         return;
     }
 
@@ -513,6 +526,7 @@ function setupEventListeners() {
         const swatch = e.target.closest('.theme-swatch');
         if (!swatch) return;
         appState.shareTheme = { ...themes[Number(swatch.dataset.index)] };
+        saveTheme();
         buildSwatches();
         setColourInputs();
         redrawCards();
@@ -520,6 +534,7 @@ function setupEventListeners() {
     for (const [id, part] of [['colour-top', 'top'], ['colour-bottom', 'bottom'], ['colour-text', 'text']]) {
         document.getElementById(id).addEventListener('input', (e) => {
             appState.shareTheme = { ...appState.shareTheme, name: 'Custom', [part]: e.target.value };
+            saveTheme();
             buildSwatches(); // None of the presets will be lit up any more
             redrawCards();
         });
@@ -1277,6 +1292,29 @@ function saveCoverSetting() {
         localStorage.setItem('unwrapper-covers', appState.shareCovers ? 'on' : 'off');
     } catch (err) {
         // Can't save, it'll just be on again next time
+    }
+}
+
+// The card's colours are remembered too, same as the cover setting. Only proper #rrggbb colours
+// get used, the colour pickers quietly ignore anything else
+const themeStorageKey = 'unwrapper-theme';
+function loadTheme() {
+    try {
+        const saved = JSON.parse(localStorage.getItem(themeStorageKey));
+        const colour = /^#[0-9a-f]{6}$/i;
+        if (saved && colour.test(saved.top) && colour.test(saved.bottom) && colour.test(saved.text)) {
+            appState.shareTheme = { name: String(saved.name || 'Custom'), top: saved.top, bottom: saved.bottom, text: saved.text };
+        }
+    } catch (err) {
+        // Nothing saved, or storage is blocked, so it stays green
+    }
+}
+
+function saveTheme() {
+    try {
+        localStorage.setItem(themeStorageKey, JSON.stringify(appState.shareTheme));
+    } catch (err) {
+        // Can't save, it'll be green again next time
     }
 }
 

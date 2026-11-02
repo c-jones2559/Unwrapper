@@ -5,22 +5,24 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <!-- The ?v= stops browsers mixing old and new files after an update. When changing any
          CSS or JS, bump it everywhere (grep for "?v=": both html files and the imports in the js) -->
-    <link rel="stylesheet" href="style.css?v=6">
+    <link rel="stylesheet" href="style.css?v=7">
     <title>Unwrapper</title>
     <link rel="manifest" href="manifest.json">
     <link rel="icon" href="icons/icon-192.png" type="image/png">
 </head>
 <body>
     <h1>Unwrapper</h1>
-    <h2>New here? Here's some <a href="https://unwrapper.cjones.cymru/info">info</a>.</h2>
-    <label for="input">Input your data here:</label><br/>
+    <h2>New here? Here's some <a href="info/">info</a>.</h2>
+    <!-- Shrinks down to Change files once there are stats, so they're not pushed below the fold -->
+    <div id="upload" class="upload">
+        <label for="input">Input your data here:</label>
+        <input type="file" id="input" name="input" accept=".json" multiple/>
+        <!-- <button id="processBtn" onclick="buttonClick()">Process</button> -->
 
-
-    <input type="file" id="input" name="input" accept=".json" multiple/>
-    <!-- <button id="processBtn" onclick="buttonClick()">Process</button> -->
-
-    <button id="processBtn">Process</button>
-    <script type="module" src="fileReader.js?v=6"></script>
+        <button id="processBtn">Process</button>
+    </div>
+    <button id="change-files" type="button" class="secondary-btn change-files hidden">Change files</button>
+    <script type="module" src="fileReader.js?v=7"></script>
     
     <!-- <p id="valid"></p> -->
 
@@ -78,10 +80,11 @@
 
             <!-- Settings: Plays/Time and Exclude. The dot shows when something's excluded -->
             <button id="settings-btn" type="button" popovertarget="settings-menu" aria-label="Settings" title="Settings">
-                <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true">
-                    <circle cx="12" cy="12" r="5" fill="none" stroke="currentColor" stroke-width="2.5"/>
-                    <path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3M5.3 5.3l2.1 2.1M16.6 16.6l2.1 2.1M5.3 18.7l2.1-2.1M16.6 7.4l2.1-2.1"
-                          stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/>
+                <!-- A cog with teeth, the old one with spokes looked like a sun (so, a light/dark switch) -->
+                <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" fill="none" stroke="currentColor"
+                     stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="12" cy="12" r="3"/>
+                    <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
                 </svg>
                 <span id="settings-dot" class="settings-dot hidden"></span>
             </button>
@@ -161,7 +164,7 @@
         </div>
     </dialog>
 
-    <!-- <script src="fileReader.js?v=6"></script> -->
+    <!-- <script src="fileReader.js?v=7"></script> -->
     <!-- <script src="statsProcessor.js"></script> -->
 </body>
 </html>
