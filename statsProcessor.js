@@ -23,6 +23,16 @@ let appState = {
 export function calculateStats(songs) {
     console.log("Initializing Dashboard...");
 
+    // Start the filters from scratch, in case this is a second upload (the dropdowns get reset too)
+    appState.timeFilter = 'all';
+    appState.monthFilter = 'all';
+    appState.graphType = 'all';
+    appState.graphKey = null;
+    appState.graphLabel = '';
+    appState.shown = 50;
+    document.getElementById('month-range').classList.add('hidden');
+    document.getElementById('custom-range').classList.add('hidden');
+
     // ts is in UTC, so work out the local year once here rather than on every filter change
     for (const song of songs) {
         const date = new Date(song.ts);
