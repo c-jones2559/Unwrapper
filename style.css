@@ -1413,12 +1413,7 @@ dialog {
     margin: 0;
 }
 
-.graph-tool-buttons {
-    display: flex;
-    gap: 0.5rem;
-}
-
-.graph-tool-buttons button, .list-filter button {
+.graph-tools button, .list-filter button {
     margin: 0;
     padding: 0.4rem 0.9rem;
     font-size: 0.85rem;
@@ -1437,4 +1432,35 @@ dialog {
     margin-bottom: 0.75rem;
     color: #e0e0e0;
     font-size: 0.9rem;
+}
+
+/* The right-click menu on list rows. Popovers open in the middle by default, the JS puts it by the click */
+.row-menu {
+    position: fixed;
+    inset: auto;
+    margin: 0;
+    padding: 0.35rem;
+    min-width: 180px;
+    background: #282828;
+    border: 1px solid #333;
+    border-radius: 8px;
+    box-shadow: 0 12px 32px rgba(0, 0, 0, 0.6);
+}
+
+.row-menu button {
+    display: block;
+    width: 100%;
+    text-align: left;
+    background: transparent;
+    color: #f3f3f3;
+    padding: 0.55rem 0.8rem;
+    margin: 0;
+    border-radius: 5px;
+    font-size: 0.95rem;
+    font-weight: normal;
+}
+
+.row-menu button:hover, .row-menu button:focus-visible {
+    background: #333;
+    outline: none;
 }

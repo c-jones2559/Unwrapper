@@ -22,7 +22,7 @@ const textWidth = cardWidth - margin * 2;
 // --- Finding the album cover ---
 // Looks up the album on Apple's iTunes search, which lets other sites use both the search and the covers.
 // Only uses a cover if the artist and the album both match, so it never shows the wrong one.
-// Gives back { image, album, kind, year } (kind's Album, EP or Single), or null if there isn't one. Throws if something goes wrong
+// Gives back { image, album, year }, or null if there isn't one. Throws if something goes wrong
 // (no internet, say), so that can be tried again rather than remembered as "no cover"
 
 async function getJSON(url) {
@@ -77,10 +77,8 @@ export async function findAlbumCover(artist, album) {
 
     // The catalogue gives a tiny 100px cover, but the same address does bigger ones
     const image = await loadImage(found.artworkUrl100.replace('100x100bb', '1000x1000bb'));
-    // iTunes puts " - EP" or " - Single" on the end of the name, otherwise it's an album
-    const kind = / - EP$/.test(found.collectionName) ? 'EP' : / - Single$/.test(found.collectionName) ? 'Single' : 'Album';
     const year = found.releaseDate ? found.releaseDate.slice(0, 4) : '';
-    return { image: image, album: album, kind: kind, year: year };
+    return { image: image, album: album, year: year };
 }
 
 // --- Text ---
@@ -212,7 +210,7 @@ function drawCover(ctx, image, x, y, w, h, radius) {
     ctx.restore();
 }
 
-// card is { label, artists: [up to 5], songs: [up to 5], minutes, topAlbum, cover: { image, album, kind, year } or null }
+// card is { label, artists: [up to 5], songs: [up to 5], minutes, topAlbum, cover: { image, album, year } or null }
 // theme is one of the themes above (or someone's own colours in the same shape)
 export function drawCard(canvas, card, theme) {
     canvas.width = cardWidth;
@@ -286,9 +284,8 @@ export function drawCard(canvas, card, theme) {
             nameY += Math.round(name.size * 1.1);
         }
 
-        // What the cover is, at the bottom of the column, captioned like a music app does: the title,
-        // then "Album · 2018" underneath
-        const caption = [card.cover.kind, card.cover.year].filter(part => part).join(' · ');
+        // What the cover is, at the bottom of the column: the title, with the year underneath
+        const caption = card.cover.year;
         const album = fitLines(ctx, card.cover.album, sideWidth, 2, 40, 26, 'bold', family);
         const albumLine = Math.round(album.size * 1.15);
         let albumY = box.y + size - 6 - 44 - albumLine * (album.lines.length - 1);

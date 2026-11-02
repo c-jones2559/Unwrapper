@@ -28,7 +28,6 @@ let appState = {
     shareCovers: true, // Whether to look up the top artist's album cover
     coverCache: {}, // Covers looked up so far, by artist and album: { status, cover }
     zoomStack: [], // Where the date filter was before each zoom on the graph, for Zoom out
-    listFilter: [], // From the graph's "See the songs": only show songs by/on these. Each { type, key, label }
     excluded: [], // Anything left out of the stats, each { type, key, label }. Remembered between visits
     excludedKeys: { artist: {}, album: {}, song: {} },
     listType: 'song', // What's in the list on screen, and the keys in order, for clicking a row
@@ -46,7 +45,6 @@ export function calculateStats(songs) {
     appState.monthFilter = 'all';
     appState.graphSeries = [];
     appState.zoomStack = [];
-    appState.listFilter = [];
     appState.shown = 50;
     document.getElementById('month-range').classList.add('hidden');
     document.getElementById('custom-range').classList.add('hidden');
@@ -106,10 +104,10 @@ function render() {
         return;
     }
 
-    // Generate List, only for what's on the graph if it came from "See the songs"
+    // Generate List. Whatever's on the graph carries over, so it only shows those (like the date filter does)
     let listData = filteredData;
-    if (appState.listFilter.length > 0) {
-        listData = filteredData.filter(song => appState.listFilter.some(pick => matchesPick(song, pick)));
+    if (appState.graphSeries.length > 0) {
+        listData = filteredData.filter(song => appState.graphSeries.some(pick => matchesPick(song, pick)));
     }
     let sortedData = [];
     if (appState.listView === 'songs') {
@@ -238,12 +236,53 @@ function applyFilterUI() {
     document.getElementById('custom-to').value = appState.customTo;
 }
 
-// "See the songs": the Songs list for whatever the graph's showing, only for what's on it (if anything's picked)
-function seeGraphSongs() {
-    appState.listFilter = appState.graphSeries.map(pick => ({ type: pick.type, key: pick.key, label: pick.label }));
-    appState.listView = 'songs';
-    setView('list');
+// Back to how the date filter was before any zooming (for phones, which can't right-click to zoom out)
+function resetZoom() {
+    if (appState.zoomStack.length == 0) return;
+    const original = appState.zoomStack[0];
+    appState.zoomStack = [];
+    appState.timeFilter = original.timeFilter;
+    appState.monthFilter = original.monthFilter;
+    appState.customFrom = original.customFrom;
+    appState.customTo = original.customTo;
+    applyFilterUI();
+    render();
 }
+
+// Right-clicking a row in the lists: View in graph, View on Spotify, or Exclude.
+// Opened by right-click, the menu key on a keyboard, or a long press on Android
+let menuIndex = -1;
+function openRowMenu(index, x, y) {
+    menuIndex = index;
+    const menu = document.getElementById('row-menu');
+    menu.showPopover();
+    // Keep it on screen if the click was near the edge
+    const left = Math.min(x, window.innerWidth - menu.offsetWidth - 8);
+    const top = Math.min(y, window.innerHeight - menu.offsetHeight - 8);
+    menu.style.left = `${Math.max(8, left)}px`;
+    menu.style.top = `${Math.max(8, top)}px`;
+    menu.querySelector('button').focus();
+}
+
+function rowMenuAction(action) {
+    document.getElementById('row-menu').hidePopover();
+    const type = appState.listType;
+    const key = appState.listKeys[menuIndex];
+    if (key == null) return;
+    const name = appState.names[type][key];
+    const label = type == 'artist' ? name.name : `${name.name} - ${name.artist}`;
+
+    if (action == 'graph') {
+        graphFromList(menuIndex);
+    } else if (action == 'spotify') {
+        // Spotify's search finds it from the name and artist, e.g. "Animal Badflower"
+        const search = type == 'artist' ? name.name : `${name.name} ${name.artist}`;
+        window.open(`https://open.spotify.com/search/${encodeURIComponent(search)}`, '_blank', 'noopener');
+    } else if (action == 'exclude') {
+        addExclusion({ type: type, key: key, label: label });
+    }
+}
+
 
 // Switches tab, same as clicking one of the tab buttons
 function setView(view) {
@@ -342,17 +381,31 @@ function setupEventListeners() {
             downloadShareImage();
         } else if (e.target.id == 'wrapped-share') {
             shareShareImage();
-        } else if (e.target.id == 'graph-zoom-out') {
-            zoomOut();
-        } else if (e.target.id == 'graph-see-songs') {
-            seeGraphSongs();
+        } else if (e.target.id == 'graph-reset-zoom') {
+            resetZoom();
         } else if (e.target.id == 'list-filter-clear') {
-            appState.listFilter = [];
+            appState.graphSeries = []; // Clears the graph too, it's the same filter
             render();
         } else if (e.target.id == 'graph-clear') {
             appState.graphSeries = [];
             render();
         }
+    });
+
+    // Right-click (or the menu key, or a long press on Android) on a list row opens its menu
+    viewport.addEventListener('contextmenu', (e) => {
+        const row = e.target.closest('.list-item');
+        if (!row) return;
+        e.preventDefault();
+        // From the keyboard there's no mouse position, so put it by the row instead
+        const box = row.getBoundingClientRect();
+        const x = e.clientX || box.left + 40;
+        const y = e.clientY || box.bottom;
+        openRowMenu(Number(row.dataset.index), x, y);
+    });
+    document.getElementById('row-menu').addEventListener('click', (e) => {
+        const item = e.target.closest('[data-action]');
+        if (item) rowMenuAction(item.dataset.action);
     });
 
     // The search boxes (on the graph and in the exclude window) and their suggestions.
@@ -556,18 +609,18 @@ function listHeaderHTML() {
     for (const [value, text] of [['songs', 'Songs'], ['artists', 'Artists'], ['albums', 'Albums']]) {
         buttons += `<button type="button" class="sub-tab" data-list="${value}" aria-pressed="${appState.listView == value}">${text}</button>`;
     }
-    // Says when the list's only showing some things, with a way back to everything
+    // Says when the list's only showing what's on the graph, with a way back to everything
     let filter = '';
-    if (appState.listFilter.length > 0) {
-        const names = appState.listFilter.map(pick => `<strong>${escapeHTML(pick.label)}</strong>`).join(', ');
+    if (appState.graphSeries.length > 0) {
+        const names = appState.graphSeries.map(pick => `<strong>${escapeHTML(pick.label)}</strong>`).join(', ');
         filter = `<div class="list-filter">
-                    <span>Only showing ${names}</span>
-                    <button id="list-filter-clear" type="button" class="secondary-btn">Show everything</button>
+                    <span>Only showing what's on the graph: ${names}</span>
+                    <button id="list-filter-clear" type="button" class="secondary-btn">Clear</button>
                   </div>`;
     }
     return `<div class="list-header">
                 <div class="sub-tabs" role="group" aria-label="Show">${buttons}</div>
-                <p class="list-hint">Click anything to see it on the graph.</p>
+                <p class="list-hint">Click anything to see it on the graph, or right-click for more.</p>
             </div>
             ${filter}`;
 }
@@ -614,11 +667,8 @@ function graphControlsHTML() {
                 ${clear}
             </div>
             <div class="graph-tools">
-                <p class="list-hint">Click a point or drag across the graph to zoom in.</p>
-                <div class="graph-tool-buttons">
-                    ${appState.zoomStack.length > 0 ? '<button id="graph-zoom-out" type="button" class="secondary-btn">Zoom out</button>' : ''}
-                    <button id="graph-see-songs" type="button" class="secondary-btn">See the songs</button>
-                </div>
+                <p class="list-hint">Click or drag across the graph to zoom in, right-click to zoom out.</p>
+                ${appState.zoomStack.length > 0 ? '<button id="graph-reset-zoom" type="button" class="secondary-btn">Reset zoom</button>' : ''}
             </div>
             <div id="graph-area" class="graph-card"></div>`;
 }
@@ -648,7 +698,7 @@ function showGraph(data) {
         }
     }
     const graph = buildGraphData(seriesRows, from, to);
-    drawGraph(area, graph, seriesInfo, appState.metric, (start, end) => zoomGraph(graph, start, end));
+    drawGraph(area, graph, seriesInfo, appState.metric, (start, end) => zoomGraph(graph, start, end), zoomOut);
 }
 
 // Uses the same lowercase keys as the lists, so this ignores capitals too

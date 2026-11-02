@@ -144,8 +144,9 @@ function keyLine(colour) {
 // series is one { label, type, colour, removable } per line, in the same order as the data.
 // Removable ones get a × button with data-index, the click is handled in statsProcessor.
 // metric is 'plays' (listens) or 'time' (hours), from the toggle.
-// onZoom(from, to) gets called with bucket numbers when someone clicks a point (from == to) or drags across some
-export function drawGraph(container, graph, series, metric, onZoom) {
+// onZoom(from, to) gets called with bucket numbers when someone clicks a point (from == to) or drags across some,
+// and onZoomOut when they right-click
+export function drawGraph(container, graph, series, metric, onZoom, onZoomOut) {
     container.innerHTML = '';
     const { unit, buckets } = graph;
     const single = series.length == 1;
@@ -233,7 +234,7 @@ export function drawGraph(container, graph, series, metric, onZoom) {
 
     const names = series.map(s => s.label).join(', ');
     const svg = svgEl('svg', { width: width, height: height, class: 'graph-svg', tabindex: 0,
-        role: 'img', 'aria-label': `${title.textContent} for ${names}. Use the arrow keys to read values, and Enter to zoom in.` });
+        role: 'img', 'aria-label': `${title.textContent} for ${names}. Use the arrow keys to read values, Enter to zoom in and Escape to zoom out.` });
 
     // Gridlines and y labels. Counts up in whole steps so hours like 0.1 + 0.2 don't come out as 0.30000000000000004
     for (let n = 0; n * step <= yMax * 1.000001; n++) {
@@ -371,7 +372,7 @@ export function drawGraph(container, graph, series, metric, onZoom) {
     const half = buckets.length == 1 ? plotW / 2 : plotW / (buckets.length - 1) / 2;
     svg.addEventListener('pointerdown', (e) => {
         showAtPointer(e); // Tapping on a phone shows the tooltip
-        if (!onZoom) return;
+        if (!onZoom || e.button != 0) return; // Only the main button zooms in, right-click zooms out
         dragStart = pointerX(e);
         svg.setPointerCapture(e.pointerId); // Keep following the drag even if it leaves the graph
     });
@@ -393,6 +394,12 @@ export function drawGraph(container, graph, series, metric, onZoom) {
         selection.setAttribute('visibility', 'hidden');
         onZoom(Math.min(a, b), moved ? Math.max(a, b) : Math.min(a, b));
     });
+    // Right-click zooms back out a step, instead of the browser's usual menu
+    svg.addEventListener('contextmenu', (e) => {
+        if (!onZoomOut) return;
+        e.preventDefault();
+        onZoomOut();
+    });
     svg.addEventListener('pointercancel', () => {
         dragStart = null;
         selection.setAttribute('visibility', 'hidden');
@@ -403,9 +410,13 @@ export function drawGraph(container, graph, series, metric, onZoom) {
     });
     svg.addEventListener('blur', hide);
     svg.addEventListener('keydown', (e) => {
-        // Enter zooms into whichever point the arrow keys are on, same as clicking it
+        // Enter zooms into whichever point the arrow keys are on, same as clicking it, and Escape zooms out
         if (e.key == 'Enter' && current != -1 && onZoom) {
             onZoom(current, current);
+            return;
+        }
+        if (e.key == 'Escape' && onZoomOut) {
+            onZoomOut();
             return;
         }
         if (e.key != 'ArrowLeft' && e.key != 'ArrowRight') return;

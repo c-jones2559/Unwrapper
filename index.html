@@ -103,6 +103,13 @@
 <div id="content-viewport">
     </div>
 
+    <!-- The menu for right-clicking a row in the lists -->
+    <div id="row-menu" class="row-menu" popover role="menu" aria-label="Options">
+        <button type="button" role="menuitem" data-action="graph">View in graph</button>
+        <button type="button" role="menuitem" data-action="spotify">View on Spotify</button>
+        <button type="button" role="menuitem" data-action="exclude">Exclude</button>
+    </div>
+
     <!-- Excluding things from the stats. Opened by the Exclude button -->
     <dialog id="exclude-dialog" aria-labelledby="exclude-title">
         <button type="button" class="dialog-close" aria-label="Close">×</button>
