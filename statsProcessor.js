@@ -12,10 +12,10 @@ let appState = {
     shown: 50, // How many rows of the list to show, goes up by 50 with each Show more
     firstPlay: 0, // ms, so the graph knows where the data starts and ends
     lastPlay: 0,
-    // Graph only: narrow it down to one artist/album/song
-    graphType: 'all', // 'all', 'artist', 'album' or 'song'
-    graphKey: null, // Same keys as topArtists/topAlbums/topSongs
-    graphLabel: '',
+    // Graph only: the artists/albums/songs picked, each one gets its own line.
+    // Each is { type, key, label, colour } with the same keys as topArtists/topAlbums/topSongs
+    graphSeries: [],
+    graphType: 'artist', // What the search box is searching for: 'artist', 'album' or 'song'
     searchIndex: {} // Everything you can search for, built once on load
 };
 
@@ -26,9 +26,8 @@ export function calculateStats(songs) {
     // Start the filters from scratch, in case this is a second upload (the dropdowns get reset too)
     appState.timeFilter = 'all';
     appState.monthFilter = 'all';
-    appState.graphType = 'all';
-    appState.graphKey = null;
-    appState.graphLabel = '';
+    appState.graphType = 'artist';
+    appState.graphSeries = [];
     appState.shown = 50;
     document.getElementById('month-range').classList.add('hidden');
     document.getElementById('custom-range').classList.add('hidden');
@@ -198,25 +197,26 @@ function setupEventListeners() {
         if (e.target.id == 'show-more-btn') {
             appState.shown += 50;
             render();
+        } else if (e.target.classList.contains('graph-chip-remove')) {
+            removeGraphPick(Number(e.target.dataset.index));
         }
     });
 
-    // Same idea for the graph's artist/album/song filter
+    // Same idea for the graph's artist/album/song search
     viewport.addEventListener('change', (e) => {
         if (e.target.id == 'graph-type') {
+            // Only changes what the search looks for, everything already picked stays on the graph
             appState.graphType = e.target.value;
-            appState.graphKey = null;
-            appState.graphLabel = '';
             render();
         } else if (e.target.id == 'graph-search') {
-            pickGraphFilter(e.target.value);
+            addGraphPick(e.target.value);
         }
     });
     viewport.addEventListener('input', (e) => {
         if (e.target.id == 'graph-search') {
             // Clicking a suggestion comes through as an input event, not a change one (in Chrome anyway)
             if (e.inputType == 'insertReplacementText' || !(e instanceof InputEvent)) {
-                pickGraphFilter(e.target.value);
+                addGraphPick(e.target.value);
             } else {
                 fillSuggestions(e.target.value);
             }
@@ -335,57 +335,101 @@ function escapeHTML(text) {
 }
 
 // 10. Graph view
+const maxSeries = 8; // One per colour in the palette, a 9th line would need a made-up colour
+const typeNames = { artist: 'Artist', album: 'Album', song: 'Song' };
+
 function graphControlsHTML() {
-    const types = [['all', 'Everything'], ['artist', 'Artist'], ['album', 'Album'], ['song', 'Song']];
     let options = '';
-    for (const [value, text] of types) {
-        options += `<option value="${value}"${appState.graphType == value ? ' selected' : ''}>${text}</option>`;
+    for (const value in typeNames) {
+        options += `<option value="${value}"${appState.graphType == value ? ' selected' : ''}>${typeNames[value]}</option>`;
     }
 
-    let search = '';
-    if (appState.graphType != 'all') {
-        search = `<input id="graph-search" list="graph-suggestions" placeholder="Search for a${appState.graphType == 'album' ? 'n' : ''} ${appState.graphType}..."
-                    value="${escapeHTML(appState.graphLabel)}" autocomplete="off">
-                  <datalist id="graph-suggestions"></datalist>`;
-    }
+    const full = appState.graphSeries.length >= maxSeries;
+    const an = appState.graphType == 'song' ? 'a' : 'an';
+    const placeholder = full ? `That's as many as it can show, remove one to add another`
+                             : `Add ${an} ${appState.graphType} to the graph...`;
 
     return `<div class="graph-controls">
-                <select id="graph-type" aria-label="Show listens for">${options}</select>
-                ${search}
+                <select id="graph-type" aria-label="Search for">${options}</select>
+                <input id="graph-search" list="graph-suggestions" placeholder="${placeholder}" autocomplete="off"${full ? ' disabled' : ''}>
+                <datalist id="graph-suggestions"></datalist>
             </div>
             <div id="graph-area" class="graph-card"></div>`;
 }
 
 function showGraph(data) {
-    // Only bother with the filter if something's actually been picked
-    let rows = data;
-    if (appState.graphType != 'all' && appState.graphKey != null) {
-        rows = data.filter(matchesGraphFilter);
-    }
-
     // Use the picked time range, but don't go past the first or last play
     const bounds = getTimeBounds();
     const from = Math.max(bounds.from == null ? -Infinity : bounds.from, appState.firstPlay);
     const to = Math.min(bounds.to == null ? Infinity : bounds.to, appState.lastPlay + 1);
 
-    const heading = appState.graphKey != null ? appState.graphLabel : 'everything';
     const area = document.getElementById('graph-area');
     if (from >= to) {
         area.textContent = 'No listens in this period.';
         return;
     }
-    drawGraph(area, buildGraphData(rows, from, to), heading);
 
-    if (appState.graphType != 'all') {
-        fillSuggestions(appState.graphLabel);
+    // Nothing picked means one line for everything, otherwise a line for each pick
+    let seriesRows = [];
+    let seriesInfo = [];
+    if (appState.graphSeries.length == 0) {
+        seriesRows.push(data);
+        seriesInfo.push({ label: 'everything', type: '', colour: 'var(--series-everything)', removable: false });
+    } else {
+        for (const pick of appState.graphSeries) {
+            seriesRows.push(data.filter(song => matchesPick(song, pick)));
+            seriesInfo.push({ label: pick.label, type: typeNames[pick.type], colour: `var(--series-${pick.colour})`, removable: true });
+        }
     }
+    drawGraph(area, buildGraphData(seriesRows, from, to), seriesInfo);
+    fillSuggestions('');
 }
 
-function matchesGraphFilter(song) {
+function matchesPick(song, pick) {
     const artist = song.master_metadata_album_artist_name;
-    if (appState.graphType == 'artist') return artist == appState.graphKey;
-    if (appState.graphType == 'album') return `${artist}\n${song.master_metadata_album_album_name}` == appState.graphKey;
-    return `${artist}\n${song.master_metadata_track_name}` == appState.graphKey;
+    if (pick.type == 'artist') return artist == pick.key;
+    if (pick.type == 'album') return `${artist}\n${song.master_metadata_album_album_name}` == pick.key;
+    return `${artist}\n${song.master_metadata_track_name}` == pick.key;
+}
+
+function isPicked(type, key) {
+    for (const pick of appState.graphSeries) {
+        if (pick.type == type && pick.key == key) return true;
+    }
+    return false;
+}
+
+// The first colour nobody's using, so lines keep their colour when another one gets removed
+function freeColour() {
+    for (let c = 1; c <= maxSeries; c++) {
+        let used = false;
+        for (const pick of appState.graphSeries) {
+            if (pick.colour == c) used = true;
+        }
+        if (!used) return c;
+    }
+    return maxSeries;
+}
+
+function addGraphPick(label) {
+    if (appState.graphSeries.length >= maxSeries) return;
+    for (const item of appState.searchIndex[appState.graphType]) {
+        if (item.label == label) {
+            if (isPicked(appState.graphType, item.key)) return;
+            appState.graphSeries.push({ type: appState.graphType, key: item.key, label: item.label, colour: freeColour() });
+            render();
+            // Straight back into the search box so you can add another
+            const search = document.getElementById('graph-search');
+            if (search && !search.disabled) search.focus();
+            return;
+        }
+    }
+    // Not an exact match yet (still typing), so leave the graph as it is
+}
+
+function removeGraphPick(index) {
+    appState.graphSeries.splice(index, 1);
+    render();
 }
 
 // Everything you can search for, most played first so the suggestions are useful
@@ -402,7 +446,8 @@ function buildSearchIndex(songs) {
     }
 }
 
-// Only puts the top 30 matches in, a datalist with 14,000 songs in it grinds to a halt
+// Only puts the top 30 matches in, a datalist with 14,000 songs in it grinds to a halt.
+// Skips anything that's already on the graph
 function fillSuggestions(text) {
     const list = document.getElementById('graph-suggestions');
     if (!list) return;
@@ -411,6 +456,7 @@ function fillSuggestions(text) {
 
     let count = 0;
     for (const item of appState.searchIndex[appState.graphType]) {
+        if (isPicked(appState.graphType, item.key)) continue;
         if (item.label.toLowerCase().includes(search)) {
             const option = document.createElement('option');
             option.value = item.label;
@@ -419,24 +465,6 @@ function fillSuggestions(text) {
             if (count == 30) break;
         }
     }
-}
-
-function pickGraphFilter(label) {
-    if (label == '') {
-        appState.graphKey = null;
-        appState.graphLabel = '';
-        render();
-        return;
-    }
-    for (const item of appState.searchIndex[appState.graphType]) {
-        if (item.label == label) {
-            appState.graphKey = item.key;
-            appState.graphLabel = item.label;
-            render();
-            return;
-        }
-    }
-    // Not an exact match yet (still typing), so leave the graph as it is
 }
 
 // --- DATA PROCESSORS (Updated to capture Artist name) ---

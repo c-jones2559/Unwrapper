@@ -232,6 +232,18 @@ a:hover {
 }
 
 .graph-card {
+    /* Line colours. Checked for colourblind-safe neighbours and contrast on #282828, in this order,
+       so add new ones to the end rather than shuffling these. 6 is a bit low contrast, the table covers it */
+    --series-everything: #1db954;
+    --series-1: #3987e5;
+    --series-2: #d95926;
+    --series-3: #199e70;
+    --series-4: #c98500;
+    --series-5: #d55181;
+    --series-6: #008300;
+    --series-7: #9085e9;
+    --series-8: #e66767;
+
     background: #282828;
     padding: 1.5rem;
     border-radius: 8px;
@@ -276,14 +288,13 @@ a:hover {
     font-variant-numeric: tabular-nums;
 }
 
+/* Colours for the area, line and dots get set per line in graph.js */
 .graph-area {
-    fill: #1db954;
     fill-opacity: 0.1;
 }
 
 .graph-line {
     fill: none;
-    stroke: #1db954;
     stroke-width: 2;
     stroke-linejoin: round;
     stroke-linecap: round;
@@ -295,7 +306,6 @@ a:hover {
 }
 
 .graph-dot {
-    fill: #1db954;
     stroke: #282828; /* Ring in the card colour so it stands off the line */
     stroke-width: 2;
 }
@@ -315,11 +325,82 @@ a:hover {
 
 .graph-tooltip strong {
     color: #f3f3f3;
+    font-variant-numeric: tabular-nums;
 }
 
 .graph-tooltip span {
     color: #b3b3b3;
     font-size: 0.85rem;
+}
+
+/* With more than one line, each gets a row: key, number, name */
+.graph-tooltip-row {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.graph-tooltip-row strong {
+    min-width: 3ch;
+    text-align: right;
+}
+
+/* The short coloured line that says which line is which */
+.graph-key {
+    display: inline-block;
+    flex-shrink: 0;
+    width: 14px;
+    height: 3px;
+    border-radius: 2px;
+}
+
+/* The picked artists/albums/songs, which double as the legend */
+.graph-legend {
+    list-style: none;
+    padding: 0;
+    margin: 0.5rem 0 1rem 0;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+}
+
+.graph-chip {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    background: #181818;
+    border: 1px solid #333;
+    border-radius: 20px;
+    padding: 0.3rem 0.4rem 0.3rem 0.75rem;
+    font-size: 0.9rem;
+    color: #f3f3f3;
+}
+
+.graph-chip-detail {
+    color: #b3b3b3;
+    font-size: 0.8rem;
+}
+
+/* Overrides the big green button style everything else gets */
+.graph-chip-remove {
+    background: transparent;
+    color: #b3b3b3;
+    border-radius: 50%;
+    width: 1.6rem;
+    height: 1.6rem;
+    padding: 0;
+    margin: 0;
+    font-size: 1rem;
+    line-height: 1;
+}
+
+.graph-chip-remove:hover {
+    background: #333;
+    color: #f3f3f3;
+}
+
+#graph-search:disabled {
+    opacity: 0.6;
 }
 
 .graph-card details {

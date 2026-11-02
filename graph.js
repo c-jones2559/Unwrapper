@@ -36,44 +36,60 @@ function nextStart(date, unit) {
     return new Date(y, m + 1, 1);
 }
 
-// Turns plays into listens per bucket between from and to (ms). Empty buckets stay in as 0
-export function buildGraphData(songs, from, to) {
+// Binary search for the last bucket starting at or before ms
+function findBucket(buckets, ms) {
+    let lo = 0, hi = buckets.length - 1;
+    while (lo < hi) {
+        const mid = Math.ceil((lo + hi) / 2);
+        if (buckets[mid].start <= ms) {
+            lo = mid;
+        } else {
+            hi = mid - 1;
+        }
+    }
+    return lo;
+}
+
+// Turns plays into listens per bucket between from and to (ms), once for each series.
+// seriesRows is a list of lists of plays, one list per line on the graph.
+// Each bucket has a listens and a time list, in the same order as seriesRows. Empty buckets stay in as 0
+export function buildGraphData(seriesRows, from, to) {
     const unit = pickUnit(to - from);
     let buckets = [];
     for (let start = startOf(from, unit); start.getTime() < to; start = nextStart(start, unit)) {
         // Partial if the range only covers some of it, like the current month, so a dip there isn't taken seriously
         const partial = start.getTime() < from || nextStart(start, unit).getTime() > to;
-        buckets.push({ start: start.getTime(), listens: 0, time: 0, partial: partial });
+        buckets.push({
+            start: start.getTime(),
+            listens: seriesRows.map(() => 0),
+            time: seriesRows.map(() => 0),
+            partial: partial
+        });
     }
 
-    for (const song of songs) {
-        if (!song.master_metadata_track_name) continue; // Music only, same as the lists
-        if (song.playedAt < from || song.playedAt >= to) continue;
+    for (let s = 0; s < seriesRows.length; s++) {
+        for (const song of seriesRows[s]) {
+            if (!song.master_metadata_track_name) continue; // Music only, same as the lists
+            if (song.playedAt < from || song.playedAt >= to) continue;
 
-        // Binary search for the last bucket starting before this play
-        let lo = 0, hi = buckets.length - 1;
-        while (lo < hi) {
-            const mid = Math.ceil((lo + hi) / 2);
-            if (buckets[mid].start <= song.playedAt) {
-                lo = mid;
-            } else {
-                hi = mid - 1;
-            }
+            const b = buckets[findBucket(buckets, song.playedAt)];
+            if (song.ms_played >= minPlayMs) b.listens[s]++;
+            b.time[s] += song.ms_played;
         }
-        if (song.ms_played >= minPlayMs) buckets[lo].listens++;
-        buckets[lo].time += song.ms_played;
     }
 
     return { unit: unit, buckets: buckets };
 }
 
 // 2. Labels
-function bucketLabel(ms, unit) {
-    const d = new Date(ms);
-    if (unit == 'hour') return d.toLocaleString(undefined, { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
-    if (unit == 'day') return d.toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' });
-    if (unit == 'week') return `Week of ${d.toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' })}`;
-    return d.toLocaleDateString(undefined, { month: 'long', year: 'numeric' });
+function bucketLabel(b, unit) {
+    const d = new Date(b.start);
+    let label;
+    if (unit == 'hour') label = d.toLocaleString(undefined, { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+    else if (unit == 'day') label = d.toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' });
+    else if (unit == 'week') label = `Week of ${d.toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' })}`;
+    else label = d.toLocaleDateString(undefined, { month: 'long', year: 'numeric' });
+    return b.partial ? `${label} (partial)` : label;
 }
 
 function tickLabel(ms, unit, manyMonths) {
@@ -103,6 +119,10 @@ function hoursString(ms) {
     return `${rounded.toLocaleString()} hour${sOnEnd(rounded)}`;
 }
 
+function listensString(n) {
+    return `${n.toLocaleString()} listen${sOnEnd(n)}`;
+}
+
 // 3. Drawing
 const SVG = 'http://www.w3.org/2000/svg';
 function svgEl(tag, attrs) {
@@ -111,27 +131,74 @@ function svgEl(tag, attrs) {
     return el;
 }
 
-// Draws the graph into container (which has to be on the page already, or its width is 0)
-export function drawGraph(container, graph, heading) {
+// The short coloured line used as a key in the legend and tooltip
+function keyLine(colour) {
+    const key = document.createElement('span');
+    key.className = 'graph-key';
+    key.style.background = colour;
+    return key;
+}
+
+// Draws the graph into container (which has to be on the page already, or its width is 0).
+// series is one { label, type, colour, removable } per line, in the same order as the data.
+// Removable ones get a × button with data-index, the click is handled in statsProcessor
+export function drawGraph(container, graph, series) {
     container.innerHTML = '';
     const { unit, buckets } = graph;
+    const single = series.length == 1;
 
-    let total = 0, max = 0;
+    let totals = series.map(() => 0);
+    let max = 0;
     for (const b of buckets) {
-        total += b.listens;
-        if (b.listens > max) max = b.listens;
+        for (let s = 0; s < series.length; s++) {
+            totals[s] += b.listens[s];
+            if (b.listens[s] > max) max = b.listens[s];
+        }
     }
 
     const title = document.createElement('h3');
     title.className = 'graph-title';
     title.textContent = `Listens per ${unit}`;
-    const subtitle = document.createElement('p');
-    subtitle.className = 'graph-subtitle';
-    subtitle.textContent = `${total.toLocaleString()} listen${sOnEnd(total)} of ${heading}`;
     container.appendChild(title);
-    container.appendChild(subtitle);
 
-    if (total == 0) {
+    // One line with nothing to remove just gets a sentence, otherwise each line gets a chip:
+    // its colour, name, total and a ×. These are the legend too
+    if (single && !series[0].removable) {
+        const subtitle = document.createElement('p');
+        subtitle.className = 'graph-subtitle';
+        subtitle.textContent = `${listensString(totals[0])} of ${series[0].label}`;
+        container.appendChild(subtitle);
+    } else {
+        const legend = document.createElement('ul');
+        legend.className = 'graph-legend';
+        for (let s = 0; s < series.length; s++) {
+            const chip = document.createElement('li');
+            chip.className = 'graph-chip';
+            chip.appendChild(keyLine(series[s].colour));
+
+            const name = document.createElement('span');
+            name.textContent = series[s].label;
+            chip.appendChild(name);
+
+            const detail = document.createElement('span');
+            detail.className = 'graph-chip-detail';
+            detail.textContent = `${series[s].type} · ${listensString(totals[s])}`;
+            chip.appendChild(detail);
+
+            if (series[s].removable) {
+                const remove = document.createElement('button');
+                remove.className = 'graph-chip-remove';
+                remove.dataset.index = s;
+                remove.setAttribute('aria-label', `Remove ${series[s].label}`);
+                remove.textContent = '×';
+                chip.appendChild(remove);
+            }
+            legend.appendChild(chip);
+        }
+        container.appendChild(legend);
+    }
+
+    if (max == 0) {
         const empty = document.createElement('p');
         empty.textContent = 'No listens in this period.';
         container.appendChild(empty);
@@ -155,8 +222,9 @@ export function drawGraph(container, graph, heading) {
     const xAt = i => left + (buckets.length == 1 ? plotW / 2 : i * plotW / (buckets.length - 1));
     const yAt = v => top + plotH - (v / yMax) * plotH;
 
+    const names = series.map(s => s.label).join(', ');
     const svg = svgEl('svg', { width: width, height: height, class: 'graph-svg', tabindex: 0,
-        role: 'img', 'aria-label': `${title.textContent}, ${subtitle.textContent}. Use the arrow keys to read values.` });
+        role: 'img', 'aria-label': `${title.textContent} for ${names}. Use the arrow keys to read values.` });
 
     // Gridlines and y labels
     for (let v = 0; v <= yMax; v += step) {
@@ -188,27 +256,31 @@ export function drawGraph(container, graph, heading) {
         svg.appendChild(label);
     }
 
-    // The area and the line on top of it
-    let line = '';
-    for (let i = 0; i < buckets.length; i++) {
-        line += `${i == 0 ? 'M' : 'L'}${xAt(i)},${yAt(buckets[i].listens)}`;
+    // One line per series. Only a single line gets the shaded area, overlapping ones turn to mud
+    for (let s = 0; s < series.length; s++) {
+        let line = '';
+        for (let i = 0; i < buckets.length; i++) {
+            line += `${i == 0 ? 'M' : 'L'}${xAt(i)},${yAt(buckets[i].listens[s])}`;
+        }
+        if (single) {
+            const area = `${line}L${xAt(buckets.length - 1)},${yAt(0)}L${xAt(0)},${yAt(0)}Z`;
+            svg.appendChild(svgEl('path', { d: area, class: 'graph-area', style: `fill: ${series[s].colour}` }));
+        }
+        svg.appendChild(svgEl('path', { d: line, class: 'graph-line', style: `stroke: ${series[s].colour}` }));
     }
-    const area = `${line}L${xAt(buckets.length - 1)},${yAt(0)}L${xAt(0)},${yAt(0)}Z`;
-    svg.appendChild(svgEl('path', { d: area, class: 'graph-area' }));
-    svg.appendChild(svgEl('path', { d: line, class: 'graph-line' }));
 
-    // Crosshair, dot and tooltip, hidden until you hover
+    // Crosshair, a dot per line and the tooltip, hidden until you hover
     const crosshair = svgEl('line', { y1: top, y2: top + plotH, class: 'graph-crosshair', visibility: 'hidden' });
-    const dot = svgEl('circle', { r: 4, class: 'graph-dot', visibility: 'hidden' });
     svg.appendChild(crosshair);
-    svg.appendChild(dot);
+    const dots = [];
+    for (let s = 0; s < series.length; s++) {
+        const dot = svgEl('circle', { r: 4, class: 'graph-dot', style: `fill: ${series[s].colour}`, visibility: 'hidden' });
+        svg.appendChild(dot);
+        dots.push(dot);
+    }
 
     const tooltip = document.createElement('div');
     tooltip.className = 'graph-tooltip hidden';
-    const tipValue = document.createElement('strong');
-    const tipDetail = document.createElement('span');
-    tooltip.appendChild(tipValue);
-    tooltip.appendChild(tipDetail);
 
     // Hovering anywhere over the plot snaps to the nearest bucket
     const hitArea = svgEl('rect', { x: left, y: top, width: plotW, height: plotH, fill: 'transparent' });
@@ -218,17 +290,43 @@ export function drawGraph(container, graph, heading) {
     function show(i) {
         current = i;
         const b = buckets[i];
-        const x = xAt(i), y = yAt(b.listens);
+        const x = xAt(i);
         crosshair.setAttribute('x1', x);
         crosshair.setAttribute('x2', x);
         crosshair.setAttribute('visibility', 'visible');
-        dot.setAttribute('cx', x);
-        dot.setAttribute('cy', y);
-        dot.setAttribute('visibility', 'visible');
+        for (let s = 0; s < series.length; s++) {
+            dots[s].setAttribute('cx', x);
+            dots[s].setAttribute('cy', yAt(b.listens[s]));
+            dots[s].setAttribute('visibility', 'visible');
+        }
 
-        tipValue.textContent = `${b.listens.toLocaleString()} listen${sOnEnd(b.listens)}`;
-        tipDetail.textContent = `${bucketLabel(b.start, unit)}${b.partial ? ' (partial)' : ''} · ${hoursString(b.time)}`;
+        // Every line at this point, not just the one you're nearest. Value first, name after
+        tooltip.innerHTML = '';
+        const when = document.createElement('span');
+        when.className = 'graph-tooltip-when';
+        when.textContent = single ? `${bucketLabel(b, unit)} · ${hoursString(b.time[0])}` : bucketLabel(b, unit);
+        if (single) {
+            const value = document.createElement('strong');
+            value.textContent = listensString(b.listens[0]);
+            tooltip.appendChild(value);
+            tooltip.appendChild(when);
+        } else {
+            tooltip.appendChild(when);
+            for (let s = 0; s < series.length; s++) {
+                const row = document.createElement('div');
+                row.className = 'graph-tooltip-row';
+                row.appendChild(keyLine(series[s].colour));
+                const value = document.createElement('strong');
+                value.textContent = b.listens[s].toLocaleString();
+                row.appendChild(value);
+                const name = document.createElement('span');
+                name.textContent = series[s].label;
+                row.appendChild(name);
+                tooltip.appendChild(row);
+            }
+        }
         tooltip.classList.remove('hidden');
+
         // Flip to the left of the line past halfway, and keep it inside the graph on narrow screens
         let tipLeft = x > width / 2 ? x - tooltip.offsetWidth - 12 : x + 12;
         tipLeft = Math.max(0, Math.min(width - tooltip.offsetWidth, tipLeft));
@@ -238,7 +336,7 @@ export function drawGraph(container, graph, heading) {
     function hide() {
         current = -1;
         crosshair.setAttribute('visibility', 'hidden');
-        dot.setAttribute('visibility', 'hidden');
+        for (const dot of dots) dot.setAttribute('visibility', 'hidden');
         tooltip.classList.add('hidden');
     }
 
@@ -267,24 +365,37 @@ export function drawGraph(container, graph, heading) {
     plot.appendChild(svg);
     plot.appendChild(tooltip);
 
-    // Same numbers as a table, for anyone who can't (or doesn't want to) use the hover
+    // Same numbers as a table, for anyone who can't (or doesn't want to) use the hover.
+    // One line gets listens and time, more than one gets a listens column each
     const details = document.createElement('details');
     const summary = document.createElement('summary');
     summary.textContent = 'Show as a table';
     details.appendChild(summary);
     const table = document.createElement('table');
     table.className = 'graph-table';
+    const headings = [unit[0].toUpperCase() + unit.slice(1)];
+    if (single) {
+        headings.push('Listens', 'Time');
+    } else {
+        for (const s of series) headings.push(s.label);
+    }
     const headRow = table.insertRow();
-    for (const text of [unit[0].toUpperCase() + unit.slice(1), 'Listens', 'Time']) {
+    for (const text of headings) {
         const th = document.createElement('th');
         th.textContent = text;
         headRow.appendChild(th);
     }
     for (const b of buckets) {
         const row = table.insertRow();
-        row.insertCell().textContent = `${bucketLabel(b.start, unit)}${b.partial ? ' (partial)' : ''}`;
-        row.insertCell().textContent = b.listens.toLocaleString();
-        row.insertCell().textContent = hoursString(b.time);
+        row.insertCell().textContent = bucketLabel(b, unit);
+        if (single) {
+            row.insertCell().textContent = b.listens[0].toLocaleString();
+            row.insertCell().textContent = hoursString(b.time[0]);
+        } else {
+            for (let s = 0; s < series.length; s++) {
+                row.insertCell().textContent = b.listens[s].toLocaleString();
+            }
+        }
     }
     details.appendChild(table);
     container.appendChild(details);
