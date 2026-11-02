@@ -1210,3 +1210,154 @@ dialog h3 {
 .settings-menu #exclude-btn {
     width: 100%;
 }
+
+/* --- WRAPPED TAB --- */
+
+.wrapped-top {
+    display: flex;
+    gap: 2rem;
+    align-items: flex-start;
+    margin-bottom: 2rem;
+}
+
+/* The card's 1080x1920, this just shrinks how it's shown */
+.card-preview {
+    width: 300px;
+    height: auto;
+    aspect-ratio: 9 / 16;
+    border-radius: 10px;
+    flex-shrink: 0;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+}
+
+.wrapped-side {
+    flex: 1;
+    min-width: 0;
+}
+
+.wrapped-side h3 {
+    margin: 0 0 1rem 0;
+    font-size: 1.4rem;
+}
+
+.year-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+}
+
+.year-chip {
+    background: transparent;
+    border: 1px solid #333;
+    color: #b3b3b3;
+    padding: 0.4rem 0.9rem;
+    margin: 0;
+    border-radius: 20px;
+    font-size: 0.9rem;
+    font-weight: normal;
+}
+
+.year-chip:hover {
+    background: #333;
+    color: #f3f3f3;
+}
+
+.year-chip[aria-pressed="true"] {
+    background: #1db954;
+    border-color: #1db954;
+    color: #fff;
+    font-weight: bold;
+}
+
+.photo-status {
+    min-height: 1.4em; /* Keeps the buttons from jumping about as the status comes and goes */
+    max-width: none;
+    margin: 1rem 0;
+    font-size: 0.85rem;
+    color: #888;
+}
+
+.wrapped-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+}
+
+.wrapped-actions button {
+    margin: 0;
+    padding: 0.6rem 1.3rem;
+    font-size: 1rem;
+}
+
+.wrapped-actions button:disabled {
+    opacity: 0.6;
+    cursor: default;
+}
+
+.eras-title {
+    margin: 0 0 0.25rem 0;
+    font-size: 1.2rem;
+}
+
+.eras-hint {
+    text-align: left;
+    margin-bottom: 1rem;
+}
+
+/* The year at the top of each era card is a button that shows that year's card */
+.era-year {
+    background: none;
+    border: none;
+    padding: 0;
+    margin: 0;
+    color: #1db954;
+    font-size: 1.3rem;
+    font-weight: bold;
+    text-decoration: underline;
+    text-decoration-color: transparent;
+    text-underline-offset: 4px;
+}
+
+.era-year:hover {
+    background: none;
+    text-decoration-color: currentColor;
+}
+
+.era-card.selected {
+    outline: 2px solid #1db954;
+}
+
+.share-check {
+    display: flex;
+    gap: 0.6rem;
+    align-items: flex-start;
+    margin: 0;
+    max-width: none;
+    font-size: 0.9rem;
+    color: #f3f3f3;
+    cursor: pointer;
+}
+
+.share-check input {
+    margin-top: 0.25rem;
+    accent-color: #1db954;
+}
+
+.share-check small {
+    display: block;
+    margin-top: 0.25rem;
+    color: #888;
+    font-size: 0.8rem;
+    line-height: 1.4;
+}
+
+@media (max-width: 600px) {
+    .wrapped-top {
+        flex-direction: column;
+        align-items: center;
+    }
+
+    .card-preview {
+        width: min(280px, 80vw);
+    }
+}

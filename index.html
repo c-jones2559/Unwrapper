@@ -120,30 +120,28 @@
         </div>
     </dialog>
 
-    <!-- The shareable image. Opened from the Eras tab -->
+    <!-- Customising the Wrapped card. Opened from the Wrapped tab -->
     <dialog id="share-dialog" class="share-dialog" aria-labelledby="share-title">
-        <h3 id="share-title">Share</h3>
+        <h3 id="share-title">Customise</h3>
         <div class="share-layout">
             <canvas id="share-canvas" width="1080" height="1920" role="img" aria-label="Preview of the image"></canvas>
             <div class="share-controls">
-                <h4><label for="share-period">Which period</label></h4>
-                <select id="share-period"></select>
-                <p class="dialog-help">"Everything" follows the date filter at the top, so change that for a different range.</p>
                 <h4>Colours</h4>
                 <div id="theme-swatches" class="theme-swatches" role="group" aria-label="Colour themes"></div>
                 <div class="custom-colours">
-                    <label>Card <input type="color" id="colour-base"></label>
-                    <label>Accent <input type="color" id="colour-accent"></label>
-                    <label>Text <input type="color" id="colour-ink"></label>
+                    <label>Top <input type="color" id="colour-top"></label>
+                    <label>Bottom <input type="color" id="colour-bottom"></label>
+                    <label>Text <input type="color" id="colour-text"></label>
                 </div>
-                <h4>Pattern</h4>
-                <div class="pattern-btns" role="group" aria-label="Pattern">
-                    <button type="button" class="pattern-btn" data-pattern="checks">Checks</button>
-                    <button type="button" class="pattern-btn" data-pattern="stripes">Stripes</button>
-                    <button type="button" class="pattern-btn" data-pattern="dots">Dots</button>
-                </div>
+                <h4>Photo</h4>
+                <label class="share-check">
+                    <input type="checkbox" id="share-photo" checked>
+                    <span>Look for a photo of your top artist
+                        <small>Their name gets looked up on MusicBrainz and Wikimedia, and nothing else is sent.
+                        If there isn't one, their name goes there instead.</small></span>
+                </label>
                 <div class="dialog-actions">
-                    <button id="share-close" type="button" class="secondary-btn">Close</button>
+                    <button id="share-close" type="button" class="secondary-btn">Done</button>
                     <button id="share-native" type="button" class="hidden">Share</button>
                     <button id="share-download" type="button">Download</button>
                 </div>

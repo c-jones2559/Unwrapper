@@ -17,10 +17,10 @@ The video and podcast files are fine to include too, they just get left out of t
 ## What you can do with it
 
 - See your top songs, artists and albums for all time, a year, a month, or any dates you pick.
-- Sort by how many times you played something, or by how long you actually spent listening to it.
+- Sort by how many times you played something, or by how long you actually spent listening to it (in the settings, behind the gear).
 - Graph your listening over time. Click anything in the lists, or search for it, to put it on the graph, and compare up to eight artists, albums or songs at once.
-- See your eras: your top artists for each year, or each month if you're looking at a single year. Then make a Wrapped-style card to share, for everything or any single year, in whatever colours you like.
-- Exclude anything you don't want counted, like sleep sounds or someone else using your account. It's remembered for next time.
+- Make your own Wrapped for any year, or all time: your top artists, songs and album and how many minutes you listened, on a card to share, in whatever colours you like. Your eras are underneath, your top artists year by year.
+- Exclude anything you don't want counted, like sleep sounds or someone else using your account (also in the settings). It's remembered for next time.
 
 ## How it counts
 
@@ -29,6 +29,8 @@ A play only counts if you listened for at least 30 seconds, which is the same ru
 ## Privacy
 
 I'm a computer scientist, not a data harvester. Everything happens in your browser: your files never get uploaded anywhere, I never see them and neither does the server.
+
+The one exception: when you make a Wrapped card, it looks for a photo of your top artist, so that artist's name gets looked up on MusicBrainz and Wikimedia Commons. Nothing else gets sent, and you can turn it off under Customise. The photos are freely licensed and credited on the card.
 
 ## Moved off Spotify?
 

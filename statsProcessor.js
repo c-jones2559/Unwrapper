@@ -1,6 +1,6 @@
 import { msToHours, sOnEnd } from './timeBits.js?v=4';
 import { buildGraphData, drawGraph } from './graph.js?v=4';
-import { drawWrappedCard, themes, readableOn } from './share.js?v=4';
+import { drawCard, themes, findArtistPhoto } from './share.js?v=4';
 
 // 1. The Global State
 let appState = {
@@ -23,9 +23,10 @@ let appState = {
     suggestBox: 'graph-search',
     activeSuggestion: -1,
     eras: null, // The eras on screen, kept for making the share image
-    shareCard: null, // What's on the share image, which period it's for (-1 is everything), and its colours
-    sharePeriod: -1,
-    shareTheme: { ...themes[0] },
+    wrappedPeriod: null, // The year the Wrapped card's for ('2026', or 'all'). Starts on the latest year
+    shareTheme: { ...themes[0] }, // The card's colours
+    sharePhotos: true, // Whether to look up a photo of the top artist
+    photoCache: {}, // Photos looked up so far, by artist name: { status, photo }
     excluded: [], // Anything left out of the stats, each { type, key, label }. Remembered between visits
     excludedKeys: { artist: {}, album: {}, song: {} },
     listType: 'song', // What's in the list on screen, and the keys in order, for clicking a row
@@ -71,17 +72,26 @@ export function calculateStats(songs) {
 function render() {
     const viewport = document.getElementById('content-viewport');
     
-    // Filter data
-    const filteredData = filterDataByTime(appState.data);
-    
-    // Update Header Stats
-    updateBentoStats(filteredData);
-
     if (appState.currentView === 'wrapped') {
         appState.eras = buildEras(appState.data);
-        viewport.innerHTML = erasHTML(appState.eras);
+        const years = appState.eras.eras.map(era => era.label);
+        if (appState.wrappedPeriod != 'all' && !years.includes(appState.wrappedPeriod)) {
+            appState.wrappedPeriod = years.length > 0 ? years[years.length - 1] : 'all';
+        }
+        // The stat cards follow the year picked here rather than the (hidden) date filter
+        updateBentoStats(wrappedRows());
+        holdHeight(viewport, () => {
+            viewport.innerHTML = wrappedHTML();
+            redrawCards();
+        });
         return;
     }
+
+    // Filter data
+    const filteredData = filterDataByTime(appState.data);
+
+    // Update Header Stats
+    updateBentoStats(filteredData);
 
     if (appState.currentView === 'graph') {
         holdHeight(viewport, () => {
@@ -257,8 +267,17 @@ function setupEventListeners() {
             render();
         } else if (e.target.closest('.list-item')) {
             graphFromList(Number(e.target.closest('.list-item').dataset.index));
-        } else if (e.target.id == 'share-btn') {
+        } else if (e.target.closest('.year-chip')) {
+            setWrappedPeriod(e.target.closest('.year-chip').dataset.year);
+        } else if (e.target.closest('.era-year')) {
+            setWrappedPeriod(e.target.closest('.era-year').dataset.year);
+            document.getElementById('controls').scrollIntoView({ behavior: 'smooth' }); // Back up to the card
+        } else if (e.target.id == 'wrapped-customise') {
             openShareWindow();
+        } else if (e.target.id == 'wrapped-download') {
+            downloadShareImage();
+        } else if (e.target.id == 'wrapped-share') {
+            shareShareImage();
         } else if (e.target.id == 'graph-clear') {
             appState.graphSeries = [];
             render();
@@ -295,28 +314,25 @@ function setupEventListeners() {
         appState.shareTheme = { ...themes[Number(swatch.dataset.index)] };
         buildSwatches();
         setColourInputs();
-        redrawShare();
+        redrawCards();
     });
-    for (const [id, part] of [['colour-base', 'base'], ['colour-accent', 'accent'], ['colour-ink', 'ink']]) {
-        document.getElementById(id).addEventListener('input', (e) => setOwnColour(part, e.target.value));
-    }
-    document.querySelectorAll('.pattern-btn').forEach(btn => {
-        btn.addEventListener('click', () => {
-            appState.shareTheme = { ...appState.shareTheme, pattern: btn.dataset.pattern };
-            buildSwatches();
-            redrawShare();
+    for (const [id, part] of [['colour-top', 'top'], ['colour-bottom', 'bottom'], ['colour-text', 'text']]) {
+        document.getElementById(id).addEventListener('input', (e) => {
+            appState.shareTheme = { ...appState.shareTheme, name: 'Custom', [part]: e.target.value };
+            buildSwatches(); // None of the presets will be lit up any more
+            redrawCards();
         });
-    });
-    document.getElementById('share-period').addEventListener('change', (e) => {
-        appState.sharePeriod = Number(e.target.value);
-        appState.shareCard = shareCardInfo(appState.sharePeriod);
-        redrawShare();
+    }
+    document.getElementById('share-photo').addEventListener('change', (e) => {
+        appState.sharePhotos = e.target.checked;
+        redrawCards();
     });
     document.getElementById('share-download').addEventListener('click', downloadShareImage);
     document.getElementById('share-native').addEventListener('click', shareShareImage);
     document.getElementById('share-close').addEventListener('click', () => {
         document.getElementById('share-dialog').close();
     });
+    document.getElementById('share-dialog').addEventListener('close', redrawCards);
 
     // The exclude window
     document.getElementById('exclude-btn').addEventListener('click', () => {
@@ -825,16 +841,15 @@ function eraValue(stats) {
 }
 
 function erasHTML(result) {
-    if (result.eras.length == 0) return `<p>No data found for this period.</p>`;
+    if (result.eras.length == 0) return `<p>No data found.</p>`;
 
-    let html = `<div class="eras-header">
-                    <p class="list-hint">Your top artists year by year.</p>
-                    <button id="share-btn" type="button">Share</button>
-                </div>
+    let html = `<h3 class="eras-title">Your eras</h3>
+                <p class="list-hint eras-hint">Your top artists year by year. Click a year to see its card.</p>
                 <div class="eras-grid">`;
     for (const era of result.eras) {
-        html += `<section class="era-card">
-                    <h3>${escapeHTML(era.label)}${era.partial ? ' <span class="era-partial">(partial)</span>' : ''}</h3>
+        const selected = appState.wrappedPeriod == era.label;
+        html += `<section class="era-card${selected ? ' selected' : ''}">
+                    <h3><button type="button" class="era-year" data-year="${era.label}">${escapeHTML(era.label)}</button>${era.partial ? ' <span class="era-partial">(partial)</span>' : ''}</h3>
                     <ol>`;
         for (let i = 0; i < era.top.length; i++) {
             const stats = era.top[i][1];
@@ -848,67 +863,125 @@ function erasHTML(result) {
     return html + `</div>`;
 }
 
-// 12. The shareable image (the drawing's in share.js)
-// What goes on it, for either everything in the date filter (period -1) or one of the eras
-function shareCardInfo(period) {
-    let rows = filterDataByTime(appState.data);
-    let label;
-    if (period >= 0) {
-        const era = appState.eras.eras[period];
-        rows = rows.filter(song => song.playedAt >= era.start && song.playedAt < era.end);
-        label = era.label;
-    } else {
-        label = rangeLabel();
-    }
+// 12. The Wrapped tab: a card for a year (or all time) to share. The drawing's in share.js
+// The plays for the year that's picked, or everything
+function wrappedRows() {
+    if (appState.wrappedPeriod == 'all') return appState.data;
+    return appState.data.filter(song => song.localYear == appState.wrappedPeriod);
+}
+
+// All your years in a few characters, for the card: "2020–2026"
+function rangeLabel() {
+    const first = new Date(appState.firstPlay).getFullYear();
+    const last = new Date(appState.lastPlay).getFullYear();
+    return first == last ? String(first) : `${first}–${last}`;
+}
+
+// What goes on the card: the same things as Wrapped (bar genre, which Spotify's data doesn't have,
+// so it's top album instead), plus a photo of the top artist if one's been found
+function currentCard() {
+    const rows = wrappedRows();
+    const artists = topArtists(rows).slice(0, 5).map(entry => entry[1].name);
     const topAlbum = topAlbums(rows)[0];
+    const lookup = appState.sharePhotos && artists[0] ? appState.photoCache[artists[0]] : null;
     return {
-        label: label,
-        artists: topArtists(rows).slice(0, 5).map(entry => entry[1].name),
+        label: appState.wrappedPeriod == 'all' ? rangeLabel() : appState.wrappedPeriod,
+        artists: artists,
         songs: topSongs(rows).slice(0, 5).map(entry => entry[1].name),
         minutes: Math.round(totalTime(rows) / 60000),
-        topAlbum: topAlbum ? topAlbum[1].name : '-'
+        topAlbum: topAlbum ? topAlbum[1].name : '-',
+        photo: lookup && lookup.status == 'found' ? lookup.photo : null
     };
 }
 
-// The whole date filter in a few characters, for running down the side: "2026", "2020–2026", "Mar 2024"
-function rangeLabel() {
-    const first = new Date(appState.eras.from);
-    const last = new Date(appState.eras.to - 1);
-    if (appState.eras.unit == 'year') {
-        return first.getFullYear() == last.getFullYear() ? String(first.getFullYear()) : `${first.getFullYear()}–${last.getFullYear()}`;
+function wrappedHTML() {
+    const years = appState.eras.eras.map(era => era.label).reverse();
+    let chips = '';
+    for (const year of years.concat('all')) {
+        chips += `<button type="button" class="year-chip" data-year="${year}" aria-pressed="${appState.wrappedPeriod == year}">${year == 'all' ? 'All time' : year}</button>`;
     }
-    const monthYear = d => d.toLocaleDateString(undefined, { month: 'short', year: 'numeric' });
-    if (monthYear(first) == monthYear(last)) return monthYear(first);
-    return first.getFullYear() == last.getFullYear() ? String(first.getFullYear()) : `${first.getFullYear()}–${last.getFullYear()}`;
+    return `<div class="wrapped-top">
+                <canvas id="wrapped-canvas" class="card-preview" role="img" aria-label="Your Wrapped card"></canvas>
+                <div class="wrapped-side">
+                    <h3>Your Wrapped</h3>
+                    <div class="year-chips" role="group" aria-label="Year">${chips}</div>
+                    <p id="photo-status" class="photo-status"></p>
+                    <div class="wrapped-actions">
+                        <button id="wrapped-share" type="button" class="hidden">Share</button>
+                        <button id="wrapped-download" type="button">Download</button>
+                        <button id="wrapped-customise" type="button" class="secondary-btn">Customise</button>
+                    </div>
+                </div>
+            </div>
+            ${erasHTML(appState.eras)}`;
 }
 
-function openShareWindow() {
-    if (!appState.eras || appState.eras.eras.length == 0) return;
-
-    // Everything in the date filter, or any one of the eras on their own
-    const select = document.getElementById('share-period');
-    select.innerHTML = '';
-    const everything = document.createElement('option');
-    everything.value = -1;
-    everything.textContent = `Everything (${rangeLabel()})`;
-    select.appendChild(everything);
-    for (let i = appState.eras.eras.length - 1; i >= 0; i--) {
-        const option = document.createElement('option');
-        option.value = i;
-        option.textContent = appState.eras.eras[i].label;
-        select.appendChild(option);
+// Draws the card on the Wrapped tab, and in the Customise window if it's open,
+// then looks for a photo if it hasn't yet
+function redrawCards() {
+    const card = currentCard();
+    for (const id of ['wrapped-canvas', 'share-canvas']) {
+        const canvas = document.getElementById(id);
+        if (!canvas) continue;
+        if (id == 'share-canvas' && !document.getElementById('share-dialog').open) continue;
+        drawCard(canvas, card, appState.shareTheme);
     }
-    select.value = appState.sharePeriod < appState.eras.eras.length ? appState.sharePeriod : -1;
-    appState.sharePeriod = Number(select.value);
+    // Start looking first, so the status line can say it's looking
+    if (card.artists[0]) lookForPhoto(card.artists[0]);
+    updatePhotoStatus(card.artists[0]);
+    makeShareFile();
+}
 
-    appState.shareCard = shareCardInfo(appState.sharePeriod);
+// Looks up a photo of the top artist, one at a time (MusicBrainz doesn't like being rushed).
+// Found or not, the answer's remembered. If it fails, it's forgotten so it can be tried again later
+let photoQueue = Promise.resolve();
+function lookForPhoto(name) {
+    if (!appState.sharePhotos || appState.photoCache[name]) return;
+    appState.photoCache[name] = { status: 'looking' };
+    photoQueue = photoQueue.then(async () => {
+        try {
+            const photo = await findArtistPhoto(name);
+            appState.photoCache[name] = photo ? { status: 'found', photo: photo } : { status: 'none' };
+        } catch (err) {
+            console.error(`Couldn't look up a photo of ${name}:`, err);
+            appState.photoCache[name] = { status: 'failed' };
+            setTimeout(() => {
+                if (appState.photoCache[name] && appState.photoCache[name].status == 'failed') delete appState.photoCache[name];
+            }, 30000);
+        }
+        // Only redraw if it's still the same card on screen
+        if (currentCard().artists[0] == name) redrawCards();
+    });
+}
+
+function updatePhotoStatus(name) {
+    const status = document.getElementById('photo-status');
+    if (!status) return;
+    const lookup = name ? appState.photoCache[name] : null;
+    let text = '';
+    if (appState.sharePhotos && lookup) {
+        if (lookup.status == 'looking') text = `Looking for a photo of ${name}...`;
+        else if (lookup.status == 'none') text = `Couldn't find a photo of ${name}, so it's their name instead.`;
+        else if (lookup.status == 'failed') text = `Couldn't look for a photo just now, so it's ${name}'s name instead.`;
+    }
+    status.textContent = text;
+}
+
+function setWrappedPeriod(period) {
+    appState.wrappedPeriod = period;
+    render();
+}
+
+// The Customise window: colours, and whether to look for a photo
+function openShareWindow() {
     buildSwatches();
     setColourInputs();
+    document.getElementById('share-photo').checked = appState.sharePhotos;
     document.getElementById('share-dialog').showModal();
-    redrawShare();
+    redrawCards();
 }
 
-// The preset colour buttons, each showing its card colour and accent
+// The preset colour buttons
 function buildSwatches() {
     const holder = document.getElementById('theme-swatches');
     holder.innerHTML = '';
@@ -917,49 +990,38 @@ function buildSwatches() {
         swatch.type = 'button';
         swatch.className = 'theme-swatch';
         swatch.dataset.index = i;
-        swatch.style.background = `linear-gradient(135deg, ${themes[i].base} 50%, ${themes[i].accent} 50%)`;
+        swatch.style.background = `linear-gradient(135deg, ${themes[i].top}, ${themes[i].bottom})`;
         swatch.setAttribute('aria-label', themes[i].name);
         swatch.title = themes[i].name;
         swatch.setAttribute('aria-pressed', sameColours(themes[i], appState.shareTheme));
         holder.appendChild(swatch);
     }
-    document.querySelectorAll('.pattern-btn').forEach(btn => {
-        btn.setAttribute('aria-pressed', btn.dataset.pattern == appState.shareTheme.pattern);
-    });
 }
 
 function sameColours(a, b) {
-    return a.base == b.base && a.accent == b.accent && a.ink == b.ink;
+    return a.top == b.top && a.bottom == b.bottom && a.text == b.text;
 }
 
 function setColourInputs() {
-    document.getElementById('colour-base').value = appState.shareTheme.base;
-    document.getElementById('colour-accent').value = appState.shareTheme.accent;
-    document.getElementById('colour-ink').value = appState.shareTheme.ink;
+    document.getElementById('colour-top').value = appState.shareTheme.top;
+    document.getElementById('colour-bottom').value = appState.shareTheme.bottom;
+    document.getElementById('colour-text').value = appState.shareTheme.text;
 }
 
-// Picking your own colours. The small labels go grey to match whether the card's light or dark
-function setOwnColour(part, value) {
-    appState.shareTheme = { ...appState.shareTheme, name: 'Custom', [part]: value };
-    appState.shareTheme.muted = readableOn(appState.shareTheme.base) == '#121212' ? '#5c5a55' : '#b8b8b8';
-    buildSwatches(); // None of the presets will be lit up any more
-    redrawShare();
-}
-
-// Redraws the preview, then makes the PNG a moment later. It's made ahead of time because
-// phones only let a page share if it does it straight away when the button's pressed
+// Makes the PNG a moment after drawing. It's made ahead of time because phones only let
+// a page share if it does it straight away when the button's pressed
 let shareFile = null;
 let blobTimer = null;
-function redrawShare() {
-    const canvas = document.getElementById('share-canvas');
-    drawWrappedCard(canvas, appState.shareCard, appState.shareTheme);
+function makeShareFile() {
     shareFile = null;
     updateShareButtons();
     clearTimeout(blobTimer);
     blobTimer = setTimeout(() => {
+        const canvas = document.getElementById('wrapped-canvas') || document.getElementById('share-canvas');
+        if (!canvas) return;
         canvas.toBlob(blob => {
             if (!blob) return;
-            const name = `unwrapper-${appState.shareCard.label.toLowerCase().replace(/[^a-z0-9]+/g, '-')}.png`;
+            const name = `unwrapper-${currentCard().label.toLowerCase().replace(/[^a-z0-9]+/g, '-')}.png`;
             shareFile = new File([blob], name, { type: 'image/png' });
             updateShareButtons();
         }, 'image/png');
@@ -968,10 +1030,15 @@ function redrawShare() {
 
 // Share only shows if the browser can actually share files (most phones, hardly any computers)
 function updateShareButtons() {
-    document.getElementById('share-download').disabled = shareFile == null;
-    const native = document.getElementById('share-native');
     const canShare = shareFile != null && navigator.canShare && navigator.canShare({ files: [shareFile] });
-    native.classList.toggle('hidden', !canShare);
+    for (const id of ['wrapped-download', 'share-download']) {
+        const button = document.getElementById(id);
+        if (button) button.disabled = shareFile == null;
+    }
+    for (const id of ['wrapped-share', 'share-native']) {
+        const button = document.getElementById(id);
+        if (button) button.classList.toggle('hidden', !canShare);
+    }
 }
 
 function downloadShareImage() {
