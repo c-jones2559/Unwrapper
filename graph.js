@@ -1,5 +1,5 @@
 // Everything for the graph tab lives in here so statsProcessor doesn't get massive
-import { sOnEnd } from './timeBits.js?v=7';
+import { sOnEnd } from './timeBits.js?v=8';
 
 const minPlayMs = 30000; // Same as the lists, so the numbers match up
 

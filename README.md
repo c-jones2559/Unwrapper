@@ -25,7 +25,7 @@ The video and podcast files are fine to include too, they just get left out of t
 
 ## How it counts
 
-A play only counts if you listened for at least 30 seconds, which is the same rule Spotify uses. Anything shorter still adds to your listening time. Podcasts and audiobooks are left out, Spotify's files overlap a bit so duplicates get removed, and names are grouped ignoring capitals and apostrophes, so "Bring Me The Horizon" and "Bring Me the Horizon" count as the same band.
+A play only counts if you listened for at least 30 seconds, which is the same rule Spotify uses. Anything shorter still adds to your listening time. Podcasts and audiobooks are left out, Spotify's files overlap a bit so duplicates get removed, and names are grouped ignoring capitals and apostrophes, so "Bring Me The Horizon" and "Bring Me the Horizon" count as the same band. Guest credits ("feat. Halsey") and edition names ("(Deluxe)", "[Remastered]") are left off too, collaborations on an artist's own album count as theirs, and an artist who's been renamed (Machine Gun Kelly to mgk) is spotted from having the same album with the same songs on it.
 
 ## Privacy
 
